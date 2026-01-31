@@ -9,11 +9,13 @@ import AdminReports from './pages/dashboards/admin/AdminReports';
 import UserManagement from './pages/dashboards/admin/UserManagement';
 
 // Department Head Pages
+
 import DeptOverview from './pages/dashboards/dept-head/DeptOverview';
-import BudgetAdjust from './pages/dashboards/dept-head/BudgetAdjust';
 import Approvals from './pages/dashboards/dept-head/Approvals';
 import DeptReports from './pages/dashboards/dept-head/DeptReports';
 import DeptAlerts from './pages/dashboards/dept-head/DeptAlerts';
+import BudgetAllocation from './pages/dashboards/dept-head/BudgetAllocation';
+
 
 // Staff Pages
 import StaffDashboard from './pages/dashboards/staff/StaffDashboard';
@@ -22,17 +24,15 @@ import StaffHistory from './pages/dashboards/staff/StaffHistory';
 import StaffAlerts from './pages/dashboards/staff/StaffAlerts';
 import StaffSettings from './pages/dashboards/staff/StaffSettings';
 
-// IMPROVED ROLE PROTECTION LOGIC
+// ProtectedRoute
 const ProtectedRoute = ({ children, allowedRole }) => {
   const userString = localStorage.getItem('user');
   
-  if (!userString) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!userString) return <Navigate to="/login" replace />;
 
   const user = JSON.parse(userString);
-  const userRole = user.role?.toLowerCase().trim();
-  const targetRole = allowedRole.toLowerCase().trim();
+  const userRole = user.role?.toLowerCase().replace(/\s+/g,"_").trim();
+  const targetRole = allowedRole.toLowerCase().replace(/\s+/g,"_").trim();
 
   if (userRole !== targetRole) {
     console.error(`Access Denied. User: "${userRole}", Required: "${targetRole}"`);
@@ -58,12 +58,12 @@ function App() {
 
         {/* DEPARTMENT HEAD SECTION */}
         <Route path="/dept-dashboard" element={<ProtectedRoute allowedRole="department_head"><DeptOverview /></ProtectedRoute>} />
-        <Route path="/dept-budget" element={<ProtectedRoute allowedRole="department_head"><BudgetAdjust /></ProtectedRoute>} />
+        <Route path="/dept-budget-allocation" element={<ProtectedRoute allowedRole="department_head"><BudgetAllocation /></ProtectedRoute>} />
         <Route path="/dept-approvals" element={<ProtectedRoute allowedRole="department_head"><Approvals /></ProtectedRoute>} />
         <Route path="/dept-reports" element={<ProtectedRoute allowedRole="department_head"><DeptReports /></ProtectedRoute>} />
         <Route path="/dept-alerts" element={<ProtectedRoute allowedRole="department_head"><DeptAlerts /></ProtectedRoute>} />
 
-        {/* STAFF SECTION - ADDED NEW ROUTES TO MATCH SIDEBAR */}
+        {/* STAFF SECTION */}
         <Route path="/staff-dashboard" element={<ProtectedRoute allowedRole="staff"><StaffDashboard /></ProtectedRoute>} />
         <Route path="/staff-request" element={<ProtectedRoute allowedRole="staff"><StaffRequest /></ProtectedRoute>} />
         <Route path="/staff-history" element={<ProtectedRoute allowedRole="staff"><StaffHistory /></ProtectedRoute>} />

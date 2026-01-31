@@ -1,11 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { 
-  LayoutDashboard, Users, Wallet, FileText, 
-  Settings, LogOut, Menu, X, PieChart,
-  ClipboardCheck, BellRing, PlusCircle, 
-  History, UserCog, HelpCircle
-} from "lucide-react";
+import { LayoutDashboard, Users, Wallet, FileText, LogOut, Menu, X, PieChart, ClipboardCheck, PlusCircle, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Sidebar() {
@@ -22,22 +17,20 @@ export default function Sidebar() {
   const menuItems = {
     admin: [
       { icon: <LayoutDashboard size={20}/>, label: "Overview", path: "/admin-dashboard" },
-      { icon: <Wallet size={20}/>, label: "Budgets", path: "/admin-budgets" },
       { icon: <Users size={20}/>, label: "Users", path: "/admin-users" },
       { icon: <FileText size={20}/>, label: "Reports", path: "/admin-reports" },
     ],
     department_head: [
       { icon: <LayoutDashboard size={20}/>, label: "Dept Dashboard", path: "/dept-dashboard" },
-      { icon: <Wallet size={20}/>, label: "Budget & Adjust", path: "/dept-budget" },
+      { icon: <Wallet size={20}/>, label: "Budget Allocation", path: "/dept-budget-allocation" }, // fixed
       { icon: <ClipboardCheck size={20}/>, label: "Approvals", path: "/dept-approvals" },
       { icon: <FileText size={20}/>, label: "Dept Reports", path: "/dept-reports" },
+      { icon: <FileText size={20}/>, label: "Alerts", path: "/dept-alerts" },
     ],
     staff: [
       { icon: <LayoutDashboard size={20}/>, label: "My Expenses", path: "/staff-dashboard" },
       { icon: <PlusCircle size={20}/>, label: "New Request", path: "/staff-request" },
-      { icon: <History size={20}/>, label: "Request History", path: "/staff-history" },
-      { icon: <BellRing size={20}/>, label: "My Alerts", path: "/staff-alerts" },
-      { icon: <UserCog size={20}/>, label: "Account Settings", path: "/staff-settings" },
+      { icon: <History size={20}/>, label: "History", path: "/staff-history" },
     ]
   };
 
@@ -46,7 +39,7 @@ export default function Sidebar() {
   return (
     <>
       <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)} className="bg-white shadow-md">
+        <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)} className="bg-white shadow-md border-slate-200">
           {isOpen ? <X size={20} /> : <Menu size={20} />}
         </Button>
       </div>
@@ -62,7 +55,7 @@ export default function Sidebar() {
           <span className="text-xl font-black tracking-tighter uppercase italic">FundMonitor</span>
         </div>
 
-        <nav className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 space-y-2 overflow-y-auto">
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Navigation</p>
           {currentMenu.map((item) => (
             <Link
@@ -77,20 +70,23 @@ export default function Sidebar() {
               `}
             >
               {item.icon}
-              {item.label}
+              <span className="truncate">{item.label}</span>
             </Link>
           ))}
         </nav>
 
-        <div className="pt-6 border-t border-slate-800 space-y-2">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all group">
+        <div className="pt-6 border-t border-slate-800">
+          <button 
+            onClick={handleLogout} 
+            className="w-full flex items-center gap-3 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all group"
+          >
             <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
             <span className="font-bold text-sm uppercase">Sign Out</span>
           </button>
         </div>
       </aside>
 
-      {isOpen && <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setIsOpen(false)} />}
+      {isOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 lg:hidden" onClick={() => setIsOpen(false)} />}
     </>
   );
 }
