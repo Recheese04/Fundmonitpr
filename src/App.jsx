@@ -9,13 +9,12 @@ import AdminReports from './pages/dashboards/admin/AdminReports';
 import UserManagement from './pages/dashboards/admin/UserManagement';
 
 // Department Head Pages
-
 import DeptOverview from './pages/dashboards/dept-head/DeptOverview';
 import Approvals from './pages/dashboards/dept-head/Approvals';
 import DeptReports from './pages/dashboards/dept-head/DeptReports';
 import DeptAlerts from './pages/dashboards/dept-head/DeptAlerts';
 import BudgetAllocation from './pages/dashboards/dept-head/BudgetAllocation';
-
+import CategoryManager from './pages/dashboards/dept-head/CategoryManager';
 
 // Staff Pages
 import StaffDashboard from './pages/dashboards/staff/StaffDashboard';
@@ -59,6 +58,7 @@ function App() {
         {/* DEPARTMENT HEAD SECTION */}
         <Route path="/dept-dashboard" element={<ProtectedRoute allowedRole="department_head"><DeptOverview /></ProtectedRoute>} />
         <Route path="/dept-budget-allocation" element={<ProtectedRoute allowedRole="department_head"><BudgetAllocation /></ProtectedRoute>} />
+        <Route path="/dept-categories" element={<ProtectedRoute allowedRole="department_head"><CategoryManager /></ProtectedRoute>} />
         <Route path="/dept-approvals" element={<ProtectedRoute allowedRole="department_head"><Approvals /></ProtectedRoute>} />
         <Route path="/dept-reports" element={<ProtectedRoute allowedRole="department_head"><DeptReports /></ProtectedRoute>} />
         <Route path="/dept-alerts" element={<ProtectedRoute allowedRole="department_head"><DeptAlerts /></ProtectedRoute>} />

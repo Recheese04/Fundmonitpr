@@ -1,6 +1,19 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Wallet, FileText, LogOut, Menu, X, PieChart, ClipboardCheck, PlusCircle, History } from "lucide-react";
+import { 
+  LayoutDashboard, 
+  Users, 
+  Wallet, 
+  FileText, 
+  LogOut, 
+  Menu, 
+  X, 
+  PieChart, 
+  ClipboardCheck, 
+  PlusCircle, 
+  History,
+  FolderTree
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Sidebar() {
@@ -22,7 +35,8 @@ export default function Sidebar() {
     ],
     department_head: [
       { icon: <LayoutDashboard size={20}/>, label: "Dept Dashboard", path: "/dept-dashboard" },
-      { icon: <Wallet size={20}/>, label: "Budget Allocation", path: "/dept-budget-allocation" }, // fixed
+      { icon: <Wallet size={20}/>, label: "Budget Allocation", path: "/dept-budget-allocation" },
+      { icon: <FolderTree size={20}/>, label: "Categories", path: "/dept-categories" },
       { icon: <ClipboardCheck size={20}/>, label: "Approvals", path: "/dept-approvals" },
       { icon: <FileText size={20}/>, label: "Dept Reports", path: "/dept-reports" },
       { icon: <FileText size={20}/>, label: "Alerts", path: "/dept-alerts" },
