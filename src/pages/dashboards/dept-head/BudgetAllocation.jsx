@@ -51,6 +51,33 @@ const BudgetAllocation = () => {
     }
   }, [selectedCategory, categories]);
 
+  // Format currency helper function
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 2
+  }).format(amount || 0);
+};
+
+const formatCompactCurrency = (value) => {
+  const num = parseFloat(value || 0);
+
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(num);
+};
+
+
+  // Format percentage helper function
+  const formatPercentage = (percentage) => {
+    const num = parseFloat(percentage || 0);
+    return `${num.toFixed(2)}%`;
+  };
+
   const fetchCategories = async () => {
     setLoadingCategories(true);
     try {
@@ -59,6 +86,11 @@ const BudgetAllocation = () => {
       
       if (data.success) {
         console.log("Categories loaded:", data.categories);
+        // Log the first category to see what fields are available
+        if (data.categories && data.categories.length > 0) {
+          console.log("First category structure:", data.categories[0]);
+          console.log("Available fields:", Object.keys(data.categories[0]));
+        }
         setCategories(data.categories || []);
       } else {
         console.error("Failed to load categories:", data.message);
@@ -73,14 +105,33 @@ const BudgetAllocation = () => {
   const fetchHistory = async () => {
     setLoadingHistory(true);
     try {
+      // Fetch allocations from allocate.php with GET request for fiscal year 2026
       const response = await fetch("http://localhost/fundmonitor-api/allocate.php?year=2026");
       const data = await response.json();
       
-      if (data.success) {
-        setHistory(data.allocations || []);
+      if (data.success && data.allocations) {
+        // Transform allocations data to history format
+        const allocationHistory = data.allocations.map(alloc => {
+          // Calculate percentage from raw allocated amount
+          const percentage = data.total_allocated 
+            ? ((alloc.raw_allocated / parseFloat(data.total_allocated.replace(/₱|,/g, ''))) * 100).toFixed(0)
+            : 0;
+          
+          return {
+            department: alloc.department,
+            allocated: alloc.allocated,
+            raw_allocated: alloc.raw_allocated,
+            allocation_percentage: parseFloat(percentage)
+          };
+        });
+        setHistory(allocationHistory);
+      } else {
+        // No allocations found - show empty state
+        setHistory([]);
       }
     } catch (error) {
       console.error("Failed to fetch history:", error);
+      setHistory([]);
     } finally {
       setLoadingHistory(false);
     }
@@ -141,8 +192,8 @@ const BudgetAllocation = () => {
       allocations: [{
         department: category.name,
         subcategory: subcategory.name,
-        percentage: `${subcategory.allocation_percentage}%`,
-        amount: `₱${parseFloat(manualAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        percentage: formatCurrency(subcategory.allocation_amount), // Changed from percentage
+        amount: formatCurrency(parseFloat(manualAmount)),
         description: subcategory.description || ''
       }]
     });
@@ -157,8 +208,8 @@ const BudgetAllocation = () => {
     const totalBudget = parseFloat(amount);
     if (isNaN(totalBudget) || totalBudget <= 0) return null;
     
-    const percentage = parseFloat(subcategory.allocation_percentage) / 100;
-    const suggested = totalBudget * percentage;
+    // Use allocation_amount directly as the suggested amount
+    const suggested = parseFloat(subcategory.allocation_amount || 0);
     
     return suggested.toFixed(2);
   };
@@ -201,12 +252,31 @@ const BudgetAllocation = () => {
               </Button>
               
               <div className="mt-4 p-4 bg-slate-50 rounded-lg border text-sm space-y-2">
-                <p className="font-bold text-slate-700 mb-2">Allocation Rules:</p>
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                  <div>• Facility Development: <strong>33%</strong></div>
-                  <div>• Faculty & Staff Dev: <strong>27%</strong></div>
-                  <div>• Curriculum Development: <strong>36%</strong></div>
-                  <div>• Student Development: <strong>4%</strong></div>
+                <p className="font-bold text-slate-700 mb-2">Budget Allocation by Category:</p>
+                <div className="grid grid-cols-1 gap-2 text-xs text-slate-600">
+                  {categories.map((cat) => {
+                    const allocationPercentage = parseFloat(cat.allocation_percentage || 0);
+                    
+                    return (
+                      <div key={cat.id} className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">• {cat.name}</span>
+                          <div className="text-right">
+                            <span className="font-bold text-indigo-600">
+                              {allocationPercentage.toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="w-full bg-slate-200 rounded-full h-1.5">
+                          <div 
+                            className="h-1.5 rounded-full transition-all bg-indigo-500"
+                            style={{ width: `${Math.min(allocationPercentage, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </CardContent>
@@ -232,7 +302,7 @@ const BudgetAllocation = () => {
                   <option value="">-- Choose a Category --</option>
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.name}
+                      {cat.name} ({parseFloat(cat.allocation_percentage || 0).toFixed(0)}%)
                     </option>
                   ))}
                 </select>
@@ -255,7 +325,7 @@ const BudgetAllocation = () => {
                   <option value="">-- Choose a Sub-category --</option>
                   {filteredSubcategories.map((sub) => (
                     <option key={sub.id} value={sub.id}>
-                      {sub.name} ({parseFloat(sub.allocation_percentage).toFixed(2)}%)
+                      {sub.name} ({formatCompactCurrency(parseFloat(sub.allocation_amount || 0))})
                     </option>
                   ))}
                 </select>
@@ -276,14 +346,14 @@ const BudgetAllocation = () => {
                     className="pl-10"
                   />
                 </div>
-                {suggestedAmount && (
+                {suggestedAmount && parseFloat(suggestedAmount) > 0 && (
                   <div className="flex items-center justify-between text-xs p-2 bg-emerald-50 rounded border border-emerald-200">
-                    <span className="text-slate-600">💡 Suggested based on total budget:</span>
+                    <span className="text-slate-600">💡 Configured allocation amount:</span>
                     <button
                       onClick={() => setManualAmount(suggestedAmount)}
                       className="text-emerald-600 hover:text-emerald-700 font-semibold hover:underline"
                     >
-                      ₱{parseFloat(suggestedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatCurrency(parseFloat(suggestedAmount))}
                     </button>
                   </div>
                 )}
@@ -398,8 +468,13 @@ const BudgetAllocation = () => {
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <p className="font-bold text-slate-900">{item.department}</p>
-                          <p className="text-xs text-slate-500 mt-1">Allocated Budget</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-slate-900">{item.department}</p>
+                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+                              {item.allocation_percentage.toFixed(0)}%
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">Category Budget</p>
                         </div>
                         <div className="text-right ml-4">
                           <p className="font-bold text-indigo-700 text-lg">{item.allocated}</p>
@@ -413,12 +488,12 @@ const BudgetAllocation = () => {
                     <div className="flex justify-between items-center">
                       <p className="font-bold text-slate-700">Total Allocated:</p>
                       <p className="font-bold text-indigo-700 text-xl">
-                        {history.length > 0 && history[0].raw_allocated ? 
-                          '₱' + new Intl.NumberFormat().format(
+                        {history.length > 0 ? 
+                          formatCurrency(
                             history.reduce((sum, item) => 
                               sum + (parseFloat(item.raw_allocated) || 0), 0
                             )
-                          ) : '₱0.00'
+                          ) : formatCurrency(0)
                         }
                       </p>
                     </div>
@@ -441,6 +516,12 @@ const BudgetAllocation = () => {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">Active Categories:</span>
                 <span className="font-bold text-indigo-700">{categories.length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-600">Total Budget Allocated:</span>
+                <span className="font-bold text-indigo-700">
+                  {formatCurrency(history.reduce((sum, item) => sum + (parseFloat(item.raw_allocated) || 0), 0))}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">Fiscal Year:</span>
@@ -468,7 +549,7 @@ const BudgetAllocation = () => {
                         <p className="text-xs text-slate-500">{cat.subcategory_count} sub-categories</p>
                       </div>
                       <span className="text-xs font-semibold text-indigo-600">
-                        {cat.total_allocation?.toFixed(2)}%
+                        {parseFloat(cat.allocation_percentage || 0).toFixed(0)}%
                       </span>
                     </div>
                   ))}

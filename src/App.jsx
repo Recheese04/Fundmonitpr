@@ -22,6 +22,8 @@ import StaffRequest from './pages/dashboards/staff/StaffRequest';
 import StaffHistory from './pages/dashboards/staff/StaffHistory';
 import StaffAlerts from './pages/dashboards/staff/StaffAlerts';
 import StaffSettings from './pages/dashboards/staff/StaffSettings';
+// NEW: Import the Tracker component you just created
+import StaffBudgetTracker from './pages/dashboards/staff/StaffBudgetTracker'; 
 
 // ProtectedRoute
 const ProtectedRoute = ({ children, allowedRole }) => {
@@ -65,6 +67,8 @@ function App() {
 
         {/* STAFF SECTION */}
         <Route path="/staff-dashboard" element={<ProtectedRoute allowedRole="staff"><StaffDashboard /></ProtectedRoute>} />
+        {/* NEW: Added the Budget Tracker Route here */}
+        <Route path="/staff-budget-tracker" element={<ProtectedRoute allowedRole="staff"><StaffBudgetTracker /></ProtectedRoute>} />
         <Route path="/staff-request" element={<ProtectedRoute allowedRole="staff"><StaffRequest /></ProtectedRoute>} />
         <Route path="/staff-history" element={<ProtectedRoute allowedRole="staff"><StaffHistory /></ProtectedRoute>} />
         <Route path="/staff-alerts" element={<ProtectedRoute allowedRole="staff"><StaffAlerts /></ProtectedRoute>} />

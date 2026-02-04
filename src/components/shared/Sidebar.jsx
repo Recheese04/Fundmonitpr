@@ -12,7 +12,8 @@ import {
   ClipboardCheck, 
   PlusCircle, 
   History,
-  FolderTree
+  FolderTree,
+  Receipt
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -43,6 +44,7 @@ export default function Sidebar() {
     ],
     staff: [
       { icon: <LayoutDashboard size={20}/>, label: "My Expenses", path: "/staff-dashboard" },
+      { icon: <Receipt size={20}/>, label: "Budget Tracker", path: "/staff-budget-tracker" },
       { icon: <PlusCircle size={20}/>, label: "New Request", path: "/staff-request" },
       { icon: <History size={20}/>, label: "History", path: "/staff-history" },
     ]
