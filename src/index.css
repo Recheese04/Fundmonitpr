@@ -49,7 +49,6 @@
   }
   @keyframes accordion-up {
     from { height: var(--radix-accordion-content-height); }
-    to { height: 0; }
   }
 }
 
@@ -83,7 +82,6 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-/* Keep your .dark and @layer base blocks below this as they were */
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -103,11 +101,6 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -124,5 +117,42 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Specific Print Configuration to match pre-Copy.pdf */
+@layer base {
+  @media print {
+    :root {
+      /* Force high contrast for black and white printing */
+      --background: 0 0% 100%;
+      --foreground: 0 0% 0%;
+      --primary: 0 0% 0%;
+      --border: 0 0% 0%;
+      --muted-foreground: 0 0% 20%;
+    }
+
+    body {
+      background: white !important;
+      color: black !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Hide UI elements during print */
+    .print\:hidden {
+      display: none !important;
+    }
+
+    /* Page Setup */
+    @page {
+      size: A4;
+      margin: 15mm;
+    }
+
+    /* Reset shadows for document clarity */
+    .shadow-lg, .shadow-2xl {
+      box-shadow: none !important;
+    }
   }
 }

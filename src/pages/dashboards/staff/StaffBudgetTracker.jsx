@@ -2,735 +2,467 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Save, Trash2, Upload, X, FileSpreadsheet, BookOpen, AlertCircle, CheckCircle2, History, Calendar, DollarSign, FileText } from "lucide-react";
+import { 
+  FolderTree, 
+  Plus, 
+  X, 
+  Save,
+  AlertTriangle,
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+  Upload,
+  Trash2,
+  Receipt,
+  DollarSign,
+  Printer // Added for printing
+} from "lucide-react";
 import DeptLayout from "../../../components/layout/DeptLayout";
 
-const API_BASE = "http://localhost/fundmonitor-api/categories.php";
-const EXPENSES_API = "http://localhost/fundmonitor-api/expenses.php";
+const API_BASE_CATEGORIES = "http://localhost/fundmonitor-api/categories.php";
+const API_BASE_EXPENSES = "http://localhost/fundmonitor-api/expenses.php";
 
 const StaffBudgetTracker = () => {
   const [categories, setCategories] = useState([]);
-  const [expenseHistory, setExpenseHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("entry");
-  const [showModal, setShowModal] = useState(false);
-  const [submissionSuccess, setSubmissionSuccess] = useState(false);
-  const [rows, setRows] = useState([{
-    id: Date.now(),
-    subcategory_id: '',
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  
+  // Expanded categories for view
+  const [expandedCategories, setExpandedCategories] = useState({});
+  
+  // Expense submission
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+  const [expenseForm, setExpenseForm] = useState({
     amount: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
     file: null,
     fileName: ''
-  }]);
+  });
 
-  useEffect(() => { 
-    fetchBudgetOptions(); 
-    fetchExpenseHistory();
+  useEffect(() => {
+    fetchCategories();
   }, []);
 
-  const fetchBudgetOptions = async () => {
+  // Auto-clear messages after 5 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  const fetchCategories = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}?action=get_categories`);
+      const currentYear = new Date().getFullYear();
+      const response = await fetch(`${API_BASE_CATEGORIES}?action=get_categories_with_budget&year=${currentYear}`);
       const data = await response.json();
-      if (data.success) setCategories(data.categories);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  const fetchExpenseHistory = async () => {
-    try {
-      const response = await fetch(`${EXPENSES_API}?action=get_expenses`);
-      const data = await response.json();
-      console.log('Expense history response:', data); // Debug log
       
-      if (data.success && data.expenses) {
-        setExpenseHistory(data.expenses);
-      } else if (Array.isArray(data)) {
-        // Handle case where API returns array directly
-        setExpenseHistory(data);
+      if (data.success) {
+        setCategories(data.categories);
+        // Auto-expand all categories
+        const expanded = {};
+        data.categories.forEach(cat => {
+          if (cat.subcategories && cat.subcategories.length > 0) {
+            expanded[cat.id] = true;
+          }
+        });
+        setExpandedCategories(expanded);
       } else {
-        setExpenseHistory([]);
+        setError(data.message);
       }
-    } catch (err) { 
-      console.error('Error fetching expense history:', err);
-      setExpenseHistory([]);
+    } catch (err) {
+      setError('Failed to fetch categories: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const addRow = () => {
-    setRows([...rows, {
-      id: Date.now(),
-      subcategory_id: '',
+  // Function to trigger browser print
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const toggleCategory = (categoryId) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId]
+    }));
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: 2
+    }).format(amount || 0);
+  };
+
+  const openExpenseModal = (category, subcategory) => {
+    setSelectedSubcategory({
+      ...subcategory,
+      categoryName: category.name,
+      categoryId: category.id
+    });
+    setExpenseForm({
       amount: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
       file: null,
       fileName: ''
-    }]);
+    });
+    setShowExpenseModal(true);
   };
 
-  const deleteRow = (id) => {
-    if (rows.length > 1) setRows(rows.filter(row => row.id !== id));
+  const closeExpenseModal = () => {
+    setShowExpenseModal(false);
+    setSelectedSubcategory(null);
+    setExpenseForm({
+      amount: '',
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+      file: null,
+      fileName: ''
+    });
   };
 
-  const updateRow = (id, field, value) => {
-    setRows(rows.map(row => row.id === id ? { ...row, [field]: value } : row));
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setExpenseForm({
+        ...expenseForm,
+        file: file,
+        fileName: file.name
+      });
+    }
   };
 
-  const handleFileUpload = (id, file) => {
-    setRows(rows.map(row => row.id === id ? { ...row, file: file, fileName: file?.name || '' } : row));
-  };
-
-  const openSubmitModal = () => {
-    const validRows = rows.filter(r => r.subcategory_id && r.amount && r.description);
-    
-    if (validRows.length === 0) {
-      alert("Please fill in at least one complete row");
+  const handleSubmitExpense = async () => {
+    if (!expenseForm.amount || parseFloat(expenseForm.amount) <= 0) {
+      setError('Please enter a valid amount');
       return;
     }
-    setShowModal(true);
-  };
 
-  const getSubcategoryName = (subId) => {
-    for (const cat of categories) {
-      const sub = cat.subcategories?.find(s => s.id == subId);
-      if (sub) return sub.name;
+    if (!expenseForm.description.trim()) {
+      setError('Please enter a description');
+      return;
     }
-    return 'Unknown';
-  };
 
-  const getCategoryName = (subId) => {
-    for (const cat of categories) {
-      const sub = cat.subcategories?.find(s => s.id == subId);
-      if (sub) return cat.name;
+    const userString = localStorage.getItem("user");
+    if (!userString) {
+      setError("Session expired. Please log in again.");
+      return;
     }
-    return 'Unknown';
-  };
-
-  const handleSubmitAll = async () => {
-    const validRows = rows.filter(r => r.subcategory_id && r.amount && r.description);
     
+    const user = JSON.parse(userString);
+    const userId = user.user_id;
+
+    if (!userId) {
+      setError("User ID missing. Please re-login.");
+      return;
+    }
+
     setLoading(true);
-    const submittedExpenses = [];
-    
-    for (const row of validRows) {
+    try {
       const formData = new FormData();
-      formData.append('subcategory_id', row.subcategory_id);
-      formData.append('amount', row.amount);
-      formData.append('description', row.description);
-      formData.append('date', row.date);
-      if (row.file) { formData.append('receipt', row.file); }
-
-      try {
-        const response = await fetch(`${EXPENSES_API}?action=create`, {
-          method: "POST",
-          body: formData,
-        });
-        const data = await response.json();
-        if (!data.success) { 
-          alert(`Error: ${data.message}`); 
-          setLoading(false); 
-          setShowModal(false);
-          return; 
-        }
-        submittedExpenses.push({
-          ...row,
-          id: data.expense_id || Date.now(),
-          submitted_at: new Date().toISOString()
-        });
-      } catch (err) { 
-        alert("Network error occurred."); 
-        setLoading(false); 
-        setShowModal(false);
-        return; 
+      formData.append('user_id', userId);
+      formData.append('subcategory_id', selectedSubcategory.id);
+      formData.append('amount', expenseForm.amount);
+      formData.append('description', expenseForm.description);
+      formData.append('date', expenseForm.date);
+      if (expenseForm.file) {
+        formData.append('receipt', expenseForm.file);
       }
+
+      const response = await fetch(`${API_BASE_EXPENSES}?action=create`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(`Expense submitted successfully! Amount: ${formatCurrency(expenseForm.amount)}`);
+        closeExpenseModal();
+        fetchCategories(); 
+      } else {
+        setError(data.message || 'Failed to submit expense');
+      }
+    } catch (err) {
+      setError('Failed to submit expense: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-    setSubmissionSuccess(true);
-    
-    // Refresh history
-    await fetchExpenseHistory();
-    
-    // Reset after 2 seconds
-    setTimeout(() => {
-      setSubmissionSuccess(false);
-      setShowModal(false);
-      setRows([{ 
-        id: Date.now(), 
-        subcategory_id: '', 
-        amount: '', 
-        description: '', 
-        date: new Date().toISOString().split('T')[0], 
-        file: null, 
-        fileName: '' 
-      }]);
-    }, 2000);
   };
-
-  const formatCurrency = (num) => new Intl.NumberFormat('en-PH', { 
-    style: 'currency', 
-    currency: 'PHP' 
-  }).format(num);
-
-  const formatDateTime = (dateStr) => {
-    const date = new Date(dateStr);
-    return new Intl.DateTimeFormat('en-PH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
-  };
-
-  const getStatusLabel = (status) => {
-    if (!status) return 'Pending';
-    const s = String(status).toLowerCase();
-    if (s === 'approved' || s === 'approve') return 'Approved';
-    if (s === 'rejected' || s === 'declined') return 'Rejected';
-    if (s === 'pending') return 'Pending';
-    return String(status);
-  };
-
-  const getStatusClass = (status) => {
-    const s = (status || 'pending').toLowerCase();
-    if (s === 'approved') return 'bg-green-100 text-green-700';
-    if (s === 'rejected') return 'bg-red-100 text-red-700';
-    if (s === 'pending') return 'bg-yellow-100 text-yellow-800';
-    return 'bg-gray-100 text-gray-700';
-  };
-
-  const calculateCategoryTotal = (cat) => {
-    return cat.subcategories?.reduce((sum, sub) => sum + parseFloat(sub.allocation_amount || 0), 0) || 0;
-  };
-
-  const grandTotal = categories.reduce((sum, cat) => sum + calculateCategoryTotal(cat), 0);
-
-  const validRows = rows.filter(r => r.subcategory_id && r.amount && r.description);
-  const totalAmount = validRows.reduce((sum, row) => sum + parseFloat(row.amount || 0), 0);
-
-  // Group expenses by date
-  const groupedHistory = expenseHistory.reduce((acc, expense) => {
-    const date = new Date(expense.expense_date || expense.date || expense.created_at).toLocaleDateString('en-PH');
-    if (!acc[date]) acc[date] = [];
-    acc[date].push(expense);
-    return acc;
-  }, {});
-
-  const totalExpenses = expenseHistory.reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0);
 
   return (
-    <DeptLayout title="Staff Budget Tracker">
-      {/* SUBMISSION MODAL */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-2xl">
-          {!submissionSuccess ? (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-xl">
-                  <AlertCircle className="w-6 h-6 text-orange-500" />
-                  Confirm Expense Submission
-                </DialogTitle>
-                <DialogDescription>
-                  Please review the following expenses before submitting:
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="max-h-96 overflow-y-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left border-b">#</th>
-                      <th className="px-3 py-2 text-left border-b">Category</th>
-                      <th className="px-3 py-2 text-right border-b">Amount</th>
-                      <th className="px-3 py-2 text-left border-b">Description</th>
-                      <th className="px-3 py-2 text-left border-b">Date</th>
-                      <th className="px-3 py-2 text-left border-b">Status</th>
-                      <th className="px-3 py-2 text-center border-b">File</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {validRows.map((row, index) => (
-                      <tr key={row.id} className="border-b hover:bg-gray-50">
-                        <td className="px-3 py-2">{index + 1}</td>
-                        <td className="px-3 py-2 font-medium">{getSubcategoryName(row.subcategory_id)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-green-700">{formatCurrency(row.amount)}</td>
-                        <td className="px-3 py-2 text-gray-600 truncate max-w-xs">{row.description}</td>
-                        <td className="px-3 py-2 text-gray-500">{row.date}</td>
-                        <td className="px-3 py-2 text-left">
-                          <span className={`text-xs px-2 py-1 rounded ${getStatusClass('pending')}`}>{getStatusLabel('pending')}</span>
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          {row.fileName ? (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">📎 Attached</span>
-                          ) : (
-                            <span className="text-xs text-gray-400">No file</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-green-50 font-bold sticky bottom-0">
-                    <tr>
-                      <td colSpan="2" className="px-3 py-3 text-right">TOTAL:</td>
-                      <td className="px-3 py-3 text-right text-green-700 text-lg font-mono">{formatCurrency(totalAmount)}</td>
-                      <td colSpan="4" className="px-3 py-3 text-gray-500 text-xs">
-                        {validRows.length} expense(s)
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              <DialogFooter className="gap-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowModal(false)}
-                  disabled={loading}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleSubmitAll}
-                  disabled={loading}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {loading ? (
-                    <>
-                      <span className="animate-spin mr-2">⏳</span> Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" /> Confirm & Submit
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <div className="text-center py-8">
-              <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-              <DialogTitle className="text-2xl text-green-700 mb-2">Success!</DialogTitle>
-              <DialogDescription className="text-lg">
-                {validRows.length} expense(s) submitted successfully
-              </DialogDescription>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        {/* Excel-style Tab Navigation */}
-        <div className="bg-white border-b-2 border-gray-200 px-2">
-          <TabsList className="bg-transparent h-auto p-0 space-x-1">
-            <TabsTrigger 
-              value="entry" 
-              className="data-[state=active]:bg-white data-[state=active]:border-t-2 data-[state=active]:border-x data-[state=active]:border-green-500 data-[state=inactive]:bg-gray-100 rounded-t-lg rounded-b-none px-6 py-2.5 font-semibold"
+    <DeptLayout title="Budget Categories & Expense Submission">
+      <div className="space-y-6">
+        
+        {/* Header - Added Print Button */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Available Budget Categories</h2>
+            <p className="text-sm text-slate-600 mt-1">
+              View budget allocations and submit expenses
+            </p>
+          </div>
+          <div className="flex gap-2 print:hidden">
+            <Button
+              onClick={handlePrint}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-sm"
             >
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Expense Entry
-            </TabsTrigger>
-            <TabsTrigger 
-              value="budget" 
-              className="data-[state=active]:bg-white data-[state=active]:border-t-2 data-[state=active]:border-x data-[state=active]:border-blue-500 data-[state=inactive]:bg-gray-100 rounded-t-lg rounded-b-none px-6 py-2.5 font-semibold"
+              <Printer className="w-4 h-4" />
+              Print Official Plan
+            </Button>
+            <Button
+              variant="outline"
+              onClick={fetchCategories}
+              disabled={loading}
+              className="gap-2"
             >
-              <BookOpen className="w-4 h-4 mr-2" />
-              Budget Categories
-           
-         
-            </TabsTrigger>
-          </TabsList>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
-        {/* EXPENSE ENTRY SHEET */}
-        <TabsContent value="entry" className="mt-0">
-          <div className="bg-white border border-gray-300 rounded-b-lg shadow-sm">
-            {/* Excel-style Toolbar */}
-            <div className="bg-gray-50 border-b border-gray-300 px-4 py-2 flex items-center gap-3">
-              <Button onClick={addRow} size="sm" variant="outline" className="bg-white hover:bg-gray-100">
-                <Plus className="w-4 h-4 mr-1" /> Add Row
-              </Button>
-              <Button 
-                onClick={openSubmitModal} 
-                size="sm" 
-                className="bg-green-600 hover:bg-green-700 text-white"
-              >
-                <Save className="w-4 h-4 mr-1" /> Submit All
-              </Button>
-              <div className="ml-auto text-xs text-gray-500 font-mono">
-                {rows.length} row(s) | {validRows.length} ready to submit
+        {/* Success Message */}
+        {success && (
+          <Card className="border-green-200 bg-green-50 print:hidden">
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-2 text-green-800">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-sm font-medium">{success}</span>
               </div>
-            </div>
+            </CardContent>
+          </Card>
+        )}
 
-            {/* Excel-style Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                {/* Column Headers (Excel-style) */}
-                <thead>
-                  <tr className="bg-gray-100 border-b-2 border-gray-400">
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200 w-12">A</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200 w-12">B</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">C</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">D</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">E</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">F</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">G</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200 w-16">H</th>
-                  </tr>
-                  <tr className="bg-green-600 text-white border-b-2 border-gray-400">
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">#</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">Row</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Sub-category</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Amount (₱)</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Description</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Date</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Attachment</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">Del</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={row.id} className="hover:bg-blue-50 transition-colors">
-                      <td className="border border-gray-300 px-3 py-2 text-center bg-gray-100 text-xs font-bold text-gray-600">
-                        {String.fromCharCode(65)}
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 text-center bg-gray-100 text-xs font-bold text-gray-600">
-                        {index + 1}
-                      </td>
-
-                      {/* Subcategory */}
-                      <td className="border border-gray-300 p-1">
-                        <select 
-                          className="w-full px-2 py-1.5 border-0 focus:ring-2 focus:ring-blue-400 text-sm bg-transparent"
-                          value={row.subcategory_id}
-                          onChange={(e) => updateRow(row.id, 'subcategory_id', e.target.value)}
-                        >
-                          <option value="">-- Select --</option>
-                          {categories.map(cat => (
-                            <optgroup key={cat.id} label={cat.name}>
-                              {cat.subcategories?.map(sub => (
-                                <option key={sub.id} value={sub.id}>{sub.name}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                      </td>
-
-                      {/* Amount */}
-                      <td className="border border-gray-300 p-1">
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="w-full px-2 py-1.5 border-0 focus:ring-2 focus:ring-blue-400 text-sm text-right font-mono"
-                          value={row.amount}
-                          onChange={(e) => updateRow(row.id, 'amount', e.target.value)}
-                          placeholder="0.00"
-                        />
-                      </td>
-
-                      {/* Description */}
-                      <td className="border border-gray-300 p-1">
-                        <input
-                          type="text"
-                          className="w-full px-2 py-1.5 border-0 focus:ring-2 focus:ring-blue-400 text-sm"
-                          value={row.description}
-                          onChange={(e) => updateRow(row.id, 'description', e.target.value)}
-                          placeholder="Enter description..."
-                        />
-                      </td>
-
-                      {/* Date */}
-                      <td className="border border-gray-300 p-1">
-                        <input
-                          type="date"
-                          className="w-full px-2 py-1.5 border-0 focus:ring-2 focus:ring-blue-400 text-sm"
-                          value={row.date}
-                          onChange={(e) => updateRow(row.id, 'date', e.target.value)}
-                        />
-                      </td>
-
-                      {/* File Upload */}
-                      <td className="border border-gray-300 p-1">
-                        <div className="flex items-center gap-1">
-                          <input type="file" className="hidden" id={`f-${row.id}`} accept="image/*,.pdf" onChange={(e) => handleFileUpload(row.id, e.target.files[0])} />
-                          <label 
-                            htmlFor={`f-${row.id}`} 
-                            className="flex-1 px-2 py-1.5 text-xs cursor-pointer hover:bg-gray-100 border border-dashed border-gray-300 rounded text-center truncate"
-                          >
-                            {row.fileName ? `📎 ${row.fileName.substring(0, 15)}...` : "📁 Choose"}
-                          </label>
-                          {row.fileName && (
-                            <X 
-                              className="w-4 h-4 cursor-pointer text-red-500 hover:text-red-700" 
-                              onClick={() => handleFileUpload(row.id, null)} 
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Delete */}
-                      <td className="border border-gray-300 p-1 text-center">
-                        <button
-                          onClick={() => deleteRow(row.id)}
-                          disabled={rows.length === 1}
-                          className="text-red-500 hover:text-red-700 disabled:text-gray-300 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Excel-style Status Bar */}
-            <div className="bg-gray-50 border-t border-gray-300 px-4 py-2 text-xs text-gray-600 font-mono flex items-center justify-between">
-              <span>Ready</span>
-              <span>Sheet 1 of 2</span>
-            </div>
-          </div>
-
-          {/* MERGED: Expense History (moved into Entry tab) */}
-          <div className="mt-6 bg-white border border-gray-300 rounded-b-lg shadow-sm">
-            <div className="bg-gray-50 border-b border-gray-300 px-4 py-3 flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-green-600" />
-                <div className="text-sm font-semibold text-gray-700">Expense Submission History</div>
+        {/* Error Message */}
+        {error && (
+          <Card className="border-red-200 bg-red-50 print:hidden">
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-2 text-red-800">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm font-medium">{error}</span>
               </div>
-              <Button 
-                onClick={fetchExpenseHistory} 
-                size="sm" 
-                variant="outline"
-                disabled={loading}
-                className="bg-white hover:bg-gray-100"
-              >
-                {loading ? "Refreshing..." : "🔄 Refresh"}
-              </Button>
-              <div className="ml-auto flex items-center gap-6">
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                  <FileText className="w-4 h-4" />
-                  <span className="font-mono">{expenseHistory.length} transaction(s)</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-green-700 font-bold">
-                  <DollarSign className="w-4 h-4" />
-                  <span className="font-mono">{formatCurrency(totalExpenses)}</span>
-                </div>
-              </div>
-            </div>
+            </CardContent>
+          </Card>
+        )}
 
-            <div className="overflow-x-auto max-h-[600px]">
-              {expenseHistory.length === 0 ? (
-                <div className="py-16 text-center text-gray-400">
-                  <History className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg">No expense history yet</p>
-                  <p className="text-sm mt-2">Submit your first expense to see it here</p>
-                </div>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-gray-100 border-b-2 border-gray-400">
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200 w-12">A</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200 w-12">B</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">C</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">D</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">E</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">F</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">G</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">H</th>
-                      <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">I</th>
-                    </tr>
-                    <tr className="bg-green-600 text-white border-b-2 border-gray-400">
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">#</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">ID</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Date</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Category</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Subcategory</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Description</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-right">Amount</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">Status</th>
-                      <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">Receipt</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(groupedHistory).sort((a, b) => new Date(b[0]) - new Date(a[0])).map(([date, expenses]) => (
-                      <React.Fragment key={date}>
-                        <tr className="bg-green-50">
-                          <td colSpan="9" className="border border-gray-300 px-4 py-2 font-semibold text-sm text-green-800">
-                            <Calendar className="w-4 h-4 inline mr-2" />
-                            {date}
-                          </td>
-                        </tr>
-                        {expenses.map((expense, index) => (
-                          <tr key={expense.id} className="hover:bg-green-50 transition-colors">
-                            <td className="border border-gray-300 px-3 py-2 text-center bg-gray-100 text-xs font-bold text-gray-600">
-                              {String.fromCharCode(65)}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-center text-xs font-mono text-gray-500">
-                              #{expense.id}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm text-gray-600">
-                              {new Date(expense.expense_date || expense.date || expense.created_at).toLocaleDateString('en-PH')}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm font-medium">
-                              {getCategoryName(expense.subcategory_id)}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm">
-                              {getSubcategoryName(expense.subcategory_id)}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm text-gray-600">
-                              {expense.description}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm text-right font-mono font-semibold text-green-700">
-                              {formatCurrency(expense.amount)}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-center">
-                              <span className={`text-xs px-2 py-1 rounded ${getStatusClass(expense.status)}`}>
-                                {getStatusLabel(expense.status)}
-                              </span>
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2 text-center">
-                              {expense.receipt_path ? (
-                                <a 
-                                  href={`http://localhost/fundmonitor-api/${expense.receipt_path}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 inline-block"
-                                >
-                                  📎 View
-                                </a>
+        {/* Categories List */}
+        <Card className="shadow-lg print:shadow-none print:border-none overflow-hidden">
+          <CardHeader className="border-b bg-gradient-to-r from-indigo-50 to-blue-50 print:from-white print:to-white">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FolderTree className="w-5 h-5 text-indigo-600 print:hidden" />
+              Budget Categories & Sub-categories
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading && categories.length === 0 ? (
+              <div className="text-center py-12">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-indigo-600" />
+                <p className="text-sm text-slate-600">Loading categories...</p>
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="text-center py-12">
+                <FolderTree className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                <p className="text-sm text-slate-600">No categories available</p>
+              </div>
+            ) : (
+              <div className="divide-y print:divide-y print:border-t">
+                {categories.map((category) => {
+                  const totalAllocated = category.subcategories?.reduce((sum, sub) => 
+                    sum + parseFloat(sub.allocation_amount || 0), 0) || 0;
+                  
+                  return (
+                    <div key={category.id} className="print:break-inside-avoid">
+                      <div className="p-4 hover:bg-slate-50 transition-colors bg-slate-50/30">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <button
+                              onClick={() => toggleCategory(category.id)}
+                              className="mt-1 p-1 hover:bg-slate-200 rounded transition-colors print:hidden"
+                            >
+                              {expandedCategories[category.id] ? (
+                                <ChevronDown className="w-4 h-4 text-slate-600" />
                               ) : (
-                                <span className="text-xs text-gray-400">No file</span>
+                                <ChevronRight className="w-4 h-4 text-slate-600" />
                               )}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="bg-green-100 font-semibold border-b-2 border-green-200">
-                          <td colSpan="7" className="border border-gray-300 px-4 py-2 text-sm text-right">
-                            Subtotal for {date}:
-                          </td>
-                          <td className="border border-gray-300 px-3 py-2 text-sm text-right font-mono text-green-700">
-                            {formatCurrency(expenses.reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0))}
-                          </td>
-                          <td className="border border-gray-300"></td>
-                        </tr>
-                      </React.Fragment>
-                    ))}
-                    <tr className="bg-green-600 text-white font-bold border-t-2 border-gray-400">
-                      <td className="border border-gray-300 px-3 py-3"></td>
-                      <td className="border border-gray-300 px-3 py-3"></td>
-                      <td className="border border-gray-300 px-3 py-3 text-sm" colSpan={5}>
-                        TOTAL EXPENSES
-                      </td>
-                      <td className="border border-gray-300 px-3 py-3 text-sm text-right font-mono">
-                        {formatCurrency(totalExpenses)}
-                      </td>
-                      <td className="border border-gray-300 px-3 py-3"></td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
-            </div>
+                            </button>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-bold text-slate-900 uppercase tracking-tight">{category.name}</h3>
+                                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full print:hidden">
+                                  {category.subcategory_count} sub-categories
+                                </span>
+                              </div>
+                              {category.description && (
+                                <p className="text-sm text-slate-600 mt-1">{category.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-            <div className="bg-gray-50 border-t border-gray-300 px-4 py-2 text-xs text-gray-600 font-mono flex items-center justify-between">
-              <span>Ready</span>
-              <span>History</span>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* BUDGET CATEGORIES SHEET */}
-        <TabsContent value="budget" className="mt-0">
-          <div className="bg-white border border-gray-300 rounded-b-lg shadow-sm">
-            <div className="bg-gray-50 border-b border-gray-300 px-4 py-2 flex items-center gap-3">
-              <div className="text-sm font-semibold text-gray-700">Budget Allocation Reference</div>
-              <div className="ml-auto text-xs text-gray-500 font-mono">
-                Total Budget: {formatCurrency(grandTotal)}
+                      {expandedCategories[category.id] && category.subcategories && category.subcategories.length > 0 && (
+                        <div className="bg-white border-t">
+                          <table className="w-full border-collapse">
+                            <thead>
+                              <tr className="border-b bg-slate-100/50 print:bg-white">
+                                <th className="text-left py-2 px-4 pl-16 print:pl-4 text-xs font-semibold text-slate-700 uppercase italic">Sub-category</th>
+                                <th className="text-left py-2 px-4 text-xs font-semibold text-slate-700 uppercase italic">Description</th>
+                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700 uppercase italic">Budget Allocation</th>
+                                <th className="text-center py-2 px-4 pr-4 text-xs font-semibold text-slate-700 uppercase italic print:hidden">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {category.subcategories.map((sub) => (
+                                <tr key={sub.id} className="border-b last:border-b-0 hover:bg-slate-50/50 transition-colors">
+                                  <td className="py-3 px-4 pl-16 print:pl-4 text-sm font-medium text-slate-900">
+                                    {sub.name}
+                                  </td>
+                                  <td className="py-3 px-4 text-sm text-slate-600 italic">
+                                    {sub.description || '-'}
+                                  </td>
+                                  <td className="py-3 px-4 text-right tabular-nums">
+                                    <span className="font-bold">{formatCurrency(parseFloat(sub.allocation_amount || 0))}</span>
+                                  </td>
+                                  <td className="py-3 px-4 pr-4 text-center print:hidden">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => openExpenseModal(category, sub)}
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                                    >
+                                      <Receipt className="w-3 h-3" />
+                                      Submit Expense
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                              <tr className="bg-slate-100/50 print:bg-white border-t border-slate-300">
+                                <td colSpan="2" className="py-3 px-4 pl-16 print:pl-4 text-sm font-bold text-slate-900 italic">
+                                  Total Category Budget
+                                </td>
+                                <td className="py-3 px-4 text-right font-black underline">
+                                  {formatCurrency(totalAllocated)}
+                                </td>
+                                <td className="py-3 px-4 pr-4 print:hidden"></td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+          {!loading && categories.length > 0 && (
+            <div className="border-t-2 border-slate-300 bg-gradient-to-r from-indigo-50 to-slate-50 p-6 print:from-white print:to-white">
+              <div className="flex justify-between items-center max-w-4xl mx-auto">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 uppercase">Grand Total Allocation:</h3>
+                  <p className="text-xs text-slate-600 mt-1">Calendar Year {new Date().getFullYear()}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-black text-indigo-700 print:text-black">
+                    {formatCurrency(
+                      categories.reduce((total, cat) => {
+                        const categoryTotal = cat.subcategories?.reduce((sum, sub) => 
+                          sum + parseFloat(sub.allocation_amount || 0), 0) || 0;
+                        return total + categoryTotal;
+                      }, 0)
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
+          )}
+        </Card>
 
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-100 border-b-2 border-gray-400">
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200 w-12">A</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200 w-12">B</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">C</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">D</th>
-                    <th className="border border-gray-300 px-3 py-2 text-xs font-bold text-center bg-gray-200">E</th>
-                  </tr>
-                  <tr className="bg-blue-600 text-white border-b-2 border-gray-400">
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">#</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-center">Row</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Category</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-left">Sub-category</th>
-                    <th className="border border-gray-300 px-3 py-3 text-xs font-bold text-right">Allocated Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((cat, catIndex) => (
-                    <React.Fragment key={cat.id}>
-                      {cat.subcategories?.map((sub, subIndex) => (
-                        <tr key={sub.id} className="hover:bg-blue-50 transition-colors">
-                          <td className="border border-gray-300 px-3 py-2 text-center bg-gray-100 text-xs font-bold text-gray-600">
-                            {String.fromCharCode(65)}
-                          </td>
-                          <td className="border border-gray-300 px-3 py-2 text-center bg-gray-100 text-xs font-bold text-gray-600">
-                            {catIndex + subIndex + 1}
-                          </td>
-                          <td className={`border border-gray-300 px-3 py-2 text-sm font-bold ${subIndex === 0 ? 'bg-blue-50' : 'bg-gray-50'}`}>
-                            {subIndex === 0 ? cat.name : ''}
-                          </td>
-                          <td className="border border-gray-300 px-3 py-2 text-sm">
-                            {sub.name}
-                          </td>
-                          <td className="border border-gray-300 px-3 py-2 text-sm text-right font-mono font-semibold text-green-700">
-                            {formatCurrency(sub.allocation_amount)}
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="bg-blue-100 font-bold">
-                        <td className="border border-gray-300 px-3 py-2 bg-gray-100"></td>
-                        <td className="border border-gray-300 px-3 py-2 bg-gray-100"></td>
-                        <td className="border border-gray-300 px-3 py-2 text-sm" colSpan={2}>
-                          {cat.name} Subtotal
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2 text-sm text-right font-mono text-blue-700">
-                          {formatCurrency(calculateCategoryTotal(cat))}
-                        </td>
-                      </tr>
-                    </React.Fragment>
-                  ))}
-                  <tr className="bg-green-600 text-white font-bold border-t-2 border-gray-400">
-                    <td className="border border-gray-300 px-3 py-3"></td>
-                    <td className="border border-gray-300 px-3 py-3"></td>
-                    <td className="border border-gray-300 px-3 py-3 text-sm" colSpan={2}>
-                      GRAND TOTAL
-                    </td>
-                    <td className="border border-gray-300 px-3 py-3 text-sm text-right font-mono">
-                      {formatCurrency(grandTotal)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div className="bg-gray-50 border-t border-gray-300 px-4 py-2 text-xs text-gray-600 font-mono flex items-center justify-between">
-              <span>Ready</span>
-              <span>Sheet 2 of 3</span>
-            </div>
+        {/* PRINT ONLY: Signatures Section (Matches scanned document) */}
+        <div className="hidden print:grid grid-cols-2 gap-x-20 mt-24 text-center">
+          <div className="space-y-0">
+            <p className="text-left italic mb-16">Prepared by:</p>
+            <p className="font-bold underline uppercase">MARLINA S. UY</p>
+            <p className="text-[10pt] uppercase text-slate-700 font-bold">Budget Designate</p>
           </div>
-        </TabsContent>
+          <div className="space-y-0">
+            <p className="text-left italic mb-16">Approved by:</p>
+            <p className="font-bold underline uppercase">LUZMINDA H.D.</p>
+            <p className="text-[10pt] uppercase text-slate-700 font-bold">Dean, College of Sciences</p>
+          </div>
+        </div>
 
-        
-      </Tabs>
+        {/* Expense Modal (Keep your original modal logic) */}
+        {showExpenseModal && selectedSubcategory && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
+            <Card className="w-full max-w-lg shadow-2xl">
+              <CardHeader className="border-b bg-emerald-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Receipt className="w-5 h-5 text-emerald-600" />
+                      Submit Expense
+                    </CardTitle>
+                    <p className="text-xs text-slate-600 mt-1">
+                      {selectedSubcategory.categoryName} → {selectedSubcategory.name}
+                    </p>
+                  </div>
+                  <button onClick={closeExpenseModal} className="p-1 hover:bg-slate-200 rounded">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 flex justify-between">
+                  <span className="text-xs font-medium">Budget Allocation:</span>
+                  <span className="text-sm font-bold text-indigo-700">
+                    {formatCurrency(parseFloat(selectedSubcategory.allocation_amount || 0))}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Expense Amount (PHP) *</label>
+                  <Input
+                    type="number"
+                    value={expenseForm.amount}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Description *</label>
+                  <textarea
+                    value={expenseForm.description}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button onClick={handleSubmitExpense} disabled={loading} className="flex-1 bg-emerald-600">
+                    {loading ? 'Submitting...' : 'Submit Expense'}
+                  </Button>
+                  <Button onClick={closeExpenseModal} variant="outline" className="flex-1">Cancel</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </DeptLayout>
   );
 };

@@ -1,4 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React from 'react';
+
+// Public Pages
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/auth/LoginPage';
 
@@ -22,16 +25,20 @@ import StaffRequest from './pages/dashboards/staff/StaffRequest';
 import StaffHistory from './pages/dashboards/staff/StaffHistory';
 import StaffAlerts from './pages/dashboards/staff/StaffAlerts';
 import StaffSettings from './pages/dashboards/staff/StaffSettings';
-// NEW: Import the Tracker component you just created
+// The new Printable Budget Component for Staff
 import StaffBudgetTracker from './pages/dashboards/staff/StaffBudgetTracker'; 
 
-// ProtectedRoute
+/**
+ * ProtectedRoute Component
+ * Checks if the user is logged in and has the correct role before granting access.
+ */
 const ProtectedRoute = ({ children, allowedRole }) => {
   const userString = localStorage.getItem('user');
   
   if (!userString) return <Navigate to="/login" replace />;
 
   const user = JSON.parse(userString);
+  // Normalize roles to match the sidebar and database (e.g., "Department Head" -> "department_head")
   const userRole = user.role?.toLowerCase().replace(/\s+/g,"_").trim();
   const targetRole = allowedRole.toLowerCase().replace(/\s+/g,"_").trim();
 
@@ -67,7 +74,7 @@ function App() {
 
         {/* STAFF SECTION */}
         <Route path="/staff-dashboard" element={<ProtectedRoute allowedRole="staff"><StaffDashboard /></ProtectedRoute>} />
-        {/* NEW: Added the Budget Tracker Route here */}
+        {/* IMPORTANT: This handles the new printable budget view for staff */}
         <Route path="/staff-budget-tracker" element={<ProtectedRoute allowedRole="staff"><StaffBudgetTracker /></ProtectedRoute>} />
         <Route path="/staff-request" element={<ProtectedRoute allowedRole="staff"><StaffRequest /></ProtectedRoute>} />
         <Route path="/staff-history" element={<ProtectedRoute allowedRole="staff"><StaffHistory /></ProtectedRoute>} />

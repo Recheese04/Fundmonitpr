@@ -1,19 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { 
-  LayoutDashboard, 
-  Users, 
-  Wallet, 
-  FileText, 
-  LogOut, 
-  Menu, 
-  X, 
-  PieChart, 
-  ClipboardCheck, 
-  PlusCircle, 
-  History,
-  FolderTree,
-  Receipt
+  LayoutDashboard, Users, Wallet, FileText, LogOut, Menu, X, 
+  PieChart, ClipboardCheck, PlusCircle, History, FolderTree, Receipt, Printer
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -40,11 +29,11 @@ export default function Sidebar() {
       { icon: <FolderTree size={20}/>, label: "Categories", path: "/dept-categories" },
       { icon: <ClipboardCheck size={20}/>, label: "Approvals", path: "/dept-approvals" },
       { icon: <FileText size={20}/>, label: "Dept Reports", path: "/dept-reports" },
-      { icon: <FileText size={20}/>, label: "Alerts", path: "/dept-alerts" },
     ],
     staff: [
       { icon: <LayoutDashboard size={20}/>, label: "My Expenses", path: "/staff-dashboard" },
-      { icon: <Receipt size={20}/>, label: "Budget Tracker", path: "/staff-budget-tracker" },
+      // Added for the printable budget file requirement
+      { icon: <Printer size={20}/>, label: "Budget Tracker", path: "/staff-budget-tracker" },
       { icon: <PlusCircle size={20}/>, label: "New Request", path: "/staff-request" },
       { icon: <History size={20}/>, label: "History", path: "/staff-history" },
     ]
@@ -54,6 +43,7 @@ export default function Sidebar() {
 
   return (
     <>
+      {/* Mobile Toggle */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)} className="bg-white shadow-md border-slate-200">
           {isOpen ? <X size={20} /> : <Menu size={20} />}
@@ -102,6 +92,7 @@ export default function Sidebar() {
         </div>
       </aside>
 
+      {/* Backdrop for mobile */}
       {isOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 lg:hidden" onClick={() => setIsOpen(false)} />}
     </>
   );

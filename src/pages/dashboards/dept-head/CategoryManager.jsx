@@ -131,11 +131,6 @@ const CategoryManager = () => {
       allocatedAmount = parseFloat(category.subcategories_allocated);
       source = 'subcategories_sum';
     }
-    // Priority 3: Allocation percentage (old method)
-    else if (category.allocation_percentage && !isNaN(parseFloat(category.allocation_percentage)) && totalBudget > 0) {
-      allocatedAmount = (parseFloat(category.allocation_percentage) / 100) * totalBudget;
-      source = 'allocation_percentage';
-    }
 
     // If total_budget is 0 but allocated_amount exists, use allocated_amount as the effective budget
     if (totalBudget === 0 && allocatedAmount > 0) {
@@ -376,6 +371,39 @@ const CategoryManager = () => {
     setShowDeleteModal(true);
   };
 
+  const handleResetSubcategoryBudget = async (subcategory) => {
+    const confirmed = window.confirm(
+      `Reset budget for "${subcategory.name}"?\n\n` +
+      `This will set the remaining budget back to the allocated amount:\n` +
+      `Allocated: ${formatCurrency(subcategory.allocation_amount)}\n\n` +
+      `Continue?`
+    );
+    
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}?action=reset_subcategory_budget`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: subcategory.id })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message || 'Budget reset successfully');
+        fetchCategories();
+      } else {
+        setError(data.message || 'Failed to reset budget');
+      }
+    } catch (err) {
+      setError('Failed to reset budget: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <DeptLayout title="Category & Sub-category Management">
       <div className="space-y-6">
@@ -478,10 +506,46 @@ const CategoryManager = () => {
                                 <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">
                                   {category.subcategory_count} sub-categories
                                 </span>
+                                {budget.totalBudget > 0 && (
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
+                                    {budget.percentageUsed.toFixed(1)}% allocated
+                                  </span>
+                                )}
                               </div>
                               {category.description && (
                                 <p className="text-sm text-slate-600 mt-1">{category.description}</p>
                               )}
+                              
+                              {/* Category Budget Summary */}
+                              <div className="mt-2 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+                                <div className="grid grid-cols-3 gap-4 text-sm">
+                                  <div>
+                                    <p className="text-xs text-slate-600 mb-1">Category Budget</p>
+                                    <p className="font-bold text-indigo-900">{formatCurrency(budget.totalBudget)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-slate-600 mb-1">Allocated to Subs</p>
+                                    <p className={`font-bold ${budget.allocatedAmount > budget.totalBudget ? 'text-red-600' : 'text-emerald-600'}`}>
+                                      {formatCurrency(budget.allocatedAmount)}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-slate-600 mb-1">Available</p>
+                                    <p className={`font-bold ${getBudgetStatusColor(budget.remainingBudget, budget.totalBudget)}`}>
+                                      {formatCurrency(budget.remainingBudget)}
+                                    </p>
+                                  </div>
+                                </div>
+                                {/* Progress Bar */}
+                                <div className="mt-2">
+                                  <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div 
+                                      className={`h-full transition-all ${getProgressBarColor(budget.percentageUsed)}`}
+                                      style={{ width: `${Math.min(budget.percentageUsed, 100)}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                           <div className="flex gap-2 ml-4">
@@ -522,50 +586,95 @@ const CategoryManager = () => {
                               <tr className="border-b bg-slate-100">
                                 <th className="text-left py-2 px-4 pl-16 text-xs font-semibold text-slate-700">Sub-category Name</th>
                                 <th className="text-left py-2 px-4 text-xs font-semibold text-slate-700">Description</th>
-                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700">Amount</th>
+                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700">Allocated</th>
+                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700">Remaining</th>
+                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700">Spent</th>
                                 <th className="text-right py-2 px-4 pr-4 text-xs font-semibold text-slate-700">Actions</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {category.subcategories.map((sub) => (
-                                <tr key={sub.id} className="border-b last:border-b-0 hover:bg-white transition-colors">
-                                  <td className="py-3 px-4 pl-16 text-sm font-medium text-slate-900">{sub.name}</td>
-                                  <td className="py-3 px-4 text-sm text-slate-600">{sub.description || '-'}</td>
-                                  <td className="py-3 px-4 text-right">
-                                    <span className="inline-flex items-center px-2.5 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
-                                      {formatCurrency(parseFloat(sub.allocation_amount || 0))}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-4 pr-4 text-right">
-                                    <div className="flex gap-2 justify-end">
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => openSubcategoryModal(category, sub)}
-                                        className="h-8 px-2"
-                                      >
-                                        <Edit className="w-3 h-3" />
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => handleDeleteSubcategory(sub)}
-                                        className="h-8 px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
+                              {category.subcategories.map((sub) => {
+                                const allocated = parseFloat(sub.allocation_amount || 0);
+                                const remaining = parseFloat(sub.remaining_budget || allocated);
+                                const spent = allocated - remaining;
+                                
+                                return (
+                                  <tr key={sub.id} className="border-b last:border-b-0 hover:bg-white transition-colors">
+                                    <td className="py-3 px-4 pl-16 text-sm font-medium text-slate-900">{sub.name}</td>
+                                    <td className="py-3 px-4 text-sm text-slate-600">{sub.description || '-'}</td>
+                                    <td className="py-3 px-4 text-right">
+                                      <span className="inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                                        {formatCurrency(allocated)}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-right">
+                                      <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
+                                        remaining <= 0 ? 'bg-red-100 text-red-700' :
+                                        remaining < allocated * 0.2 ? 'bg-orange-100 text-orange-700' :
+                                        'bg-emerald-100 text-emerald-700'
+                                      }`}>
+                                        {formatCurrency(remaining)}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-right">
+                                      <span className="inline-flex items-center px-2.5 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full">
+                                        {formatCurrency(spent)}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 pr-4 text-right">
+                                      <div className="flex gap-2 justify-end">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleResetSubcategoryBudget(sub)}
+                                          className="h-8 px-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                                          title="Reset remaining budget to allocated amount"
+                                        >
+                                          <RefreshCw className="w-3 h-3" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => openSubcategoryModal(category, sub)}
+                                          className="h-8 px-2"
+                                        >
+                                          <Edit className="w-3 h-3" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleDeleteSubcategory(sub)}
+                                          className="h-8 px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                               {/* Total Row */}
                               <tr className="bg-slate-100 border-t-2 border-slate-300">
                                 <td colSpan="2" className="py-3 px-4 pl-16 text-sm font-bold text-slate-900">
-                                  Total Allocated Budget
+                                  Totals
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <span className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-bold rounded-full">
+                                    {formatCurrency(category.subcategories.reduce((sum, sub) => sum + parseFloat(sub.allocation_amount || 0), 0))}
+                                  </span>
                                 </td>
                                 <td className="py-3 px-4 text-right">
                                   <span className="inline-flex items-center px-3 py-1.5 bg-emerald-100 text-emerald-700 text-sm font-bold rounded-full">
-                                    {formatCurrency(budget.allocatedAmount)}
+                                    {formatCurrency(category.subcategories.reduce((sum, sub) => sum + parseFloat(sub.remaining_budget || sub.allocation_amount || 0), 0))}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <span className="inline-flex items-center px-3 py-1.5 bg-slate-200 text-slate-700 text-sm font-bold rounded-full">
+                                    {formatCurrency(category.subcategories.reduce((sum, sub) => {
+                                      const allocated = parseFloat(sub.allocation_amount || 0);
+                                      const remaining = parseFloat(sub.remaining_budget || allocated);
+                                      return sum + (allocated - remaining);
+                                    }, 0))}
                                   </span>
                                 </td>
                                 <td className="py-3 px-4 pr-4"></td>
@@ -591,7 +700,6 @@ const CategoryManager = () => {
                   <p className="text-3xl font-bold text-indigo-700">
                     {(() => {
                       const total = categories.reduce((total, cat) => {
-                        // Use allocated_budget from budgets table (priority)
                         const categoryBudget = cat.allocated_budget !== undefined && cat.allocated_budget !== null
                           ? parseFloat(cat.allocated_budget || 0)
                           : 0;
@@ -737,24 +845,14 @@ const CategoryManager = () => {
                   <label className="text-sm font-medium text-slate-700">Allocation Amount (PHP) *</label>
                   <Input
                     type="number"
-                    min="50000"
-                    max={(() => {
-                      const category = categories.find(c => c.id === subcategoryForm.category_id);
-                      const budget = category ? calculateCategoryBudget(category) : null;
-                      return budget && budget.totalBudget > 0 ? Math.max(100000, budget.totalBudget * 0.2) : 100000;
-                    })()}
+                    min="0"
                     step="0.01"
                     value={subcategoryForm.allocation_amount}
                     onChange={(e) => setSubcategoryForm({ ...subcategoryForm, allocation_amount: e.target.value })}
                     placeholder="e.g., 50000.00"
                   />
                   <p className="text-xs text-slate-500">
-                    Range: {formatCurrency(50000)} - {(() => {
-                      const category = categories.find(c => c.id === subcategoryForm.category_id);
-                      const budget = category ? calculateCategoryBudget(category) : null;
-                      const maxAmount = budget && budget.totalBudget > 0 ? Math.max(100000, budget.totalBudget * 0.2) : 100000;
-                      return formatCurrency(maxAmount);
-                    })()}
+                    Set the budget amount for this sub-category
                   </p>
                 </div>
                 <div className="space-y-2">
