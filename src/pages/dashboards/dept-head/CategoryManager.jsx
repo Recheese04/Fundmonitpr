@@ -20,6 +20,7 @@ const API_BASE = "http://localhost/fundmonitor-api/categories.php";
 
 const CategoryManager = () => {
   const [categories, setCategories] = useState([]);
+  const [departmentAllocatedBudget, setDepartmentAllocatedBudget] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -34,6 +35,9 @@ const CategoryManager = () => {
   const [editingSubcategory, setEditingSubcategory] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   
+  // Store the current category for subcategory operations
+  const [currentCategory, setCurrentCategory] = useState(null);
+  
   // Expanded categories
   const [expandedCategories, setExpandedCategories] = useState({});
   
@@ -47,6 +51,7 @@ const CategoryManager = () => {
   // Subcategory form
   const [subcategoryForm, setSubcategoryForm] = useState({
     category_id: '',
+    department_id: '',
     name: '',
     allocation_amount: '',
     description: ''
@@ -74,27 +79,35 @@ const CategoryManager = () => {
   const fetchCategories = async () => {
     setLoading(true);
     try {
-      const currentYear = new Date().getFullYear();
-      const response = await fetch(`${API_BASE}?action=get_categories_with_budget&year=${currentYear}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setCategories(data.categories);
-        // Auto-expand categories with subcategories
-        const expanded = {};
-        data.categories.forEach(cat => {
-          if (cat.subcategories && cat.subcategories.length > 0) {
-            expanded[cat.id] = true;
-          }
-        });
-        setExpandedCategories(expanded);
-      } else {
-        setError(data.message);
-      }
+        const user = JSON.parse(localStorage.getItem('user'));
+        const deptId = user?.department_id || 0;
+        const currentYear = new Date().getFullYear();
+
+        const response = await fetch(
+            `${API_BASE}?action=get_categories_with_budget&year=${currentYear}&department_id=${deptId}`
+        );
+        const data = await response.json();
+        
+        if (data.success) {
+            // Ensure every category has department_id
+            const categoriesWithDept = data.categories.map(cat => ({
+                ...cat,
+                department_id: cat.department_id || deptId
+            }));
+            setCategories(categoriesWithDept);
+            setDepartmentAllocatedBudget(data.department_allocated_budget || 0); // Add this line
+            const expanded = {};
+            categoriesWithDept.forEach(cat => {
+                if (cat.subcategories?.length > 0) expanded[cat.id] = true;
+            });
+            setExpandedCategories(expanded);
+        } else {
+            setError(data.message);
+        }
     } catch (err) {
-      setError('Failed to fetch categories: ' + err.message);
+        setError('Failed to fetch categories: ' + err.message);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
@@ -105,7 +118,6 @@ const CategoryManager = () => {
     }));
   };
 
-  // Format currency helper function
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
@@ -114,11 +126,9 @@ const CategoryManager = () => {
     }).format(amount || 0);
   };
 
-  // Calculate allocated and remaining budget for a category
   const calculateCategoryBudget = (category) => {
     let totalBudget = parseFloat(category.total_budget || 0);
     
-    // Priority 1: Use allocated_budget from budgets table (most accurate)
     let allocatedAmount = 0;
     let source = 'none';
     
@@ -126,28 +136,17 @@ const CategoryManager = () => {
       allocatedAmount = parseFloat(category.allocated_budget);
       source = 'budgets_table';
     } 
-    // Priority 2: Sum of subcategories (fallback)
     else if (category.subcategories_allocated !== undefined && !isNaN(parseFloat(category.subcategories_allocated))) {
       allocatedAmount = parseFloat(category.subcategories_allocated);
       source = 'subcategories_sum';
     }
 
-    // If total_budget is 0 but allocated_amount exists, use allocated_amount as the effective budget
     if (totalBudget === 0 && allocatedAmount > 0) {
       totalBudget = allocatedAmount;
     }
 
     const remainingBudget = totalBudget - allocatedAmount;
     const percentageUsed = totalBudget > 0 ? (allocatedAmount / totalBudget) * 100 : 0;
-
-    console.log('Budget Calculation:', {
-      categoryName: category.name,
-      totalBudget,
-      allocatedAmount,
-      source,
-      remainingBudget,
-      percentageUsed
-    });
 
     return {
       totalBudget,
@@ -157,7 +156,6 @@ const CategoryManager = () => {
     };
   };
 
-  // Get budget status color
   const getBudgetStatusColor = (remaining, total) => {
     if (remaining < 0) return 'text-red-600';
     if (remaining === 0) return 'text-slate-500';
@@ -166,7 +164,6 @@ const CategoryManager = () => {
     return 'text-emerald-600';
   };
 
-  // Get progress bar color
   const getProgressBarColor = (percentUsed) => {
     if (percentUsed > 100) return 'bg-red-500';
     if (percentUsed === 100) return 'bg-slate-500';
@@ -205,8 +202,12 @@ const CategoryManager = () => {
       return;
     }
 
-    if (!categoryForm.total_budget || parseFloat(categoryForm.total_budget) < 0) {
-      setError('Total budget must be greater than or equal to 0');
+    const userData = localStorage.getItem('user');
+    const user = userData ? JSON.parse(userData) : null;
+    const deptId = user?.department_id;
+
+    if (!deptId) {
+      setError('Session expired. Please log in again.');
       return;
     }
 
@@ -219,8 +220,8 @@ const CategoryManager = () => {
       const method = editingCategory ? 'PUT' : 'POST';
       
       const payload = editingCategory
-        ? { id: editingCategory.id, ...categoryForm }
-        : categoryForm;
+        ? { id: editingCategory.id, ...categoryForm, department_id: deptId }
+        : { ...categoryForm, department_id: deptId };
 
       const response = await fetch(url, {
         method,
@@ -280,32 +281,77 @@ const CategoryManager = () => {
     }
   };
 
+  // ============================================
+  // SUBCATEGORY OPERATIONS
+  // ============================================
+
   const openSubcategoryModal = (category, subcategory = null) => {
+    console.log('=== Opening Subcategory Modal ===');
+    console.log('Category object:', category);
+    
+    // Store the current category
+    setCurrentCategory(category);
+    
+    // Get department_id - try multiple sources
+    const userData = localStorage.getItem('user');
+    const user = userData ? JSON.parse(userData) : null;
+    const deptId = category.department_id || user?.department_id || 0;
+    
+    console.log('Department ID resolution:', {
+      from_category: category.department_id,
+      from_user: user?.department_id,
+      final_deptId: deptId
+    });
+    
+    if (!category.id) {
+      setError('Category ID is missing. Please refresh the page and try again.');
+      return;
+    }
+    
+    if (!deptId || deptId === 0) {
+      setError('Department ID could not be determined. Please log out and log back in.');
+      return;
+    }
+    
     if (subcategory) {
+      // Editing existing subcategory
+      console.log('Editing subcategory:', subcategory);
       setEditingSubcategory(subcategory);
       setSubcategoryForm({
-        category_id: category.id,
+        category_id: String(category.id),
+        department_id: String(deptId),
         name: subcategory.name,
         allocation_amount: subcategory.allocation_amount || 0,
         description: subcategory.description || ''
       });
     } else {
+      // Creating new subcategory
+      console.log('Creating new subcategory');
       setEditingSubcategory(null);
       setSubcategoryForm({
-        category_id: category.id,
+        category_id: String(category.id),
+        department_id: String(deptId),
         name: '',
         allocation_amount: '',
         description: ''
       });
     }
+    
+    console.log('Form initialized:', {
+      category_id: String(category.id),
+      department_id: String(deptId)
+    });
+    
     setShowSubcategoryModal(true);
   };
 
   const closeSubcategoryModal = () => {
     setShowSubcategoryModal(false);
     setEditingSubcategory(null);
+    setCurrentCategory(null);
     setSubcategoryForm({
       category_id: '',
+      department_id: '',
       name: '',
       allocation_amount: '',
       description: ''
@@ -313,20 +359,52 @@ const CategoryManager = () => {
   };
 
   const handleSaveSubcategory = async () => {
+    console.log('=== Save Subcategory Called ===');
+    console.log('Form state:', subcategoryForm);
+    
     if (!subcategoryForm.name.trim()) {
       setError('Sub-category name is required');
       return;
     }
 
-    if (!subcategoryForm.allocation_amount && subcategoryForm.allocation_amount !== 0) {
-      setError('Allocation amount is required');
+    // Parse the IDs
+    const catId = parseInt(subcategoryForm.category_id);
+    const deptId = parseInt(subcategoryForm.department_id);
+
+    console.log('Parsed IDs:', {
+      original_catId: subcategoryForm.category_id,
+      parsed_catId: catId,
+      catId_isNaN: isNaN(catId),
+      original_deptId: subcategoryForm.department_id,
+      parsed_deptId: deptId,
+      deptId_isNaN: isNaN(deptId)
+    });
+
+    // Validate category ID
+    if (!catId || catId === 0 || isNaN(catId)) {
+      console.error('Category ID validation failed!', {
+        catId,
+        type: typeof catId,
+        form_value: subcategoryForm.category_id,
+        form_type: typeof subcategoryForm.category_id
+      });
+      setError(`Invalid Category ID: ${catId}. Form value: "${subcategoryForm.category_id}". Please close the modal and try again.`);
+      return;
+    }
+    
+    // Validate department ID
+    if (!deptId || deptId === 0 || isNaN(deptId)) {
+      console.error('Department ID validation failed!', {
+        deptId,
+        type: typeof deptId,
+        form_value: subcategoryForm.department_id,
+        form_type: typeof subcategoryForm.department_id
+      });
+      setError(`Invalid Department ID: ${deptId}. Form value: "${subcategoryForm.department_id}". Please log out and log back in.`);
       return;
     }
 
-    if (parseFloat(subcategoryForm.allocation_amount) < 0) {
-      setError('Allocation amount must be greater than or equal to 0');
-      return;
-    }
+    console.log('Validation passed! Proceeding with save...');
 
     setLoading(true);
     try {
@@ -336,12 +414,24 @@ const CategoryManager = () => {
       
       const method = editingSubcategory ? 'PUT' : 'POST';
       
-      const payload = editingSubcategory
-        ? { id: editingSubcategory.id, ...subcategoryForm }
-        : subcategoryForm;
-
-      console.log('Saving subcategory with payload:', payload);
+      const payload = {
+        name: subcategoryForm.name.trim(),
+        allocation_amount: parseFloat(subcategoryForm.allocation_amount) || 0,
+        description: subcategoryForm.description.trim(),
+        category_id: catId,
+        department_id: deptId
+      };
       
+      if (editingSubcategory) {
+        payload.id = editingSubcategory.id;
+      }
+
+      console.log('Sending request:', {
+        url,
+        method,
+        payload
+      });
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -349,17 +439,17 @@ const CategoryManager = () => {
       });
 
       const data = await response.json();
-      console.log('Response from server:', data);
+      console.log('Server response:', data);
       
       if (data.success) {
         setSuccess(data.message);
         closeSubcategoryModal();
         fetchCategories();
       } else {
-        setError(data.message || 'Failed to save sub-category');
+        setError(data.message);
       }
     } catch (err) {
-      console.error('Error saving subcategory:', err);
+      console.error('Request failed:', err);
       setError('Failed to save sub-category: ' + err.message);
     } finally {
       setLoading(false);
@@ -536,7 +626,6 @@ const CategoryManager = () => {
                                     </p>
                                   </div>
                                 </div>
-                                {/* Progress Bar */}
                                 <div className="mt-2">
                                   <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                                     <div 
@@ -693,20 +782,17 @@ const CategoryManager = () => {
             <div className="border-t-2 border-slate-300 bg-gradient-to-r from-indigo-50 to-slate-50 p-6">
               <div className="flex justify-between items-center max-w-4xl mx-auto">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Total Allocated Budget:</h3>
-                  <p className="text-xs text-slate-600 mt-1">From budget allocations (FY {new Date().getFullYear()})</p>
+                  <h3 className="text-lg font-bold text-slate-900">Total Department Budget:</h3>
+                  <p className="text-xs text-slate-600 mt-1">Allocated to categories (FY {new Date().getFullYear()})</p>
                 </div>
                 <div className="text-right">
                   <p className="text-3xl font-bold text-indigo-700">
                     {(() => {
-                      const total = categories.reduce((total, cat) => {
-                        const categoryBudget = cat.allocated_budget !== undefined && cat.allocated_budget !== null
-                          ? parseFloat(cat.allocated_budget || 0)
-                          : 0;
-                        console.log(`Category: ${cat.name}, Allocated Budget: ${categoryBudget}`);
-                        return total + categoryBudget;
+                      // Sum up the allocation_amount or total_budget from each category
+                      const total = categories.reduce((sum, cat) => {
+                        const amount = parseFloat(cat.allocation_amount || cat.total_budget || 0);
+                        return sum + amount;
                       }, 0);
-                      console.log(`Grand Total Allocated: ${total}`);
                       return formatCurrency(total);
                     })()}
                   </p>
@@ -804,32 +890,27 @@ const CategoryManager = () => {
                 </div>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
-                {(() => {
-                  const category = categories.find(c => c.id === subcategoryForm.category_id);
-                  const budget = category ? calculateCategoryBudget(category) : null;
+                {currentCategory && (() => {
+                  const budget = calculateCategoryBudget(currentCategory);
                   const oldAmount = editingSubcategory ? parseFloat(editingSubcategory.allocation_amount || 0) : 0;
-                  const availableBudget = budget ? budget.remainingBudget + oldAmount : 0;
+                  const availableBudget = budget.remainingBudget + oldAmount;
 
                   return (
-                    <>
-                      {budget && (
-                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                          <p className="text-xs font-medium text-slate-700 mb-2">Category Budget Status:</p>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <span className="text-slate-600">Total Budget:</span>
-                              <p className="font-bold text-slate-900">{formatCurrency(budget.totalBudget)}</p>
-                            </div>
-                            <div>
-                              <span className="text-slate-600">Available:</span>
-                              <p className={`font-bold ${getBudgetStatusColor(availableBudget, budget.totalBudget)}`}>
-                                {formatCurrency(availableBudget)}
-                              </p>
-                            </div>
-                          </div>
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <p className="text-xs font-medium text-slate-700 mb-2">Category Budget Status:</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-slate-600">Total Budget:</span>
+                          <p className="font-bold text-slate-900">{formatCurrency(budget.totalBudget)}</p>
                         </div>
-                      )}
-                    </>
+                        <div>
+                          <span className="text-slate-600">Available:</span>
+                          <p className={`font-bold ${getBudgetStatusColor(availableBudget, budget.totalBudget)}`}>
+                            {formatCurrency(availableBudget)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   );
                 })()}
                 

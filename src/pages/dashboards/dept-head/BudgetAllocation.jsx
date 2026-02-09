@@ -21,6 +21,9 @@ const BudgetAllocation = () => {
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   
+  // Get user info from localStorage
+  const [userDeptId, setUserDeptId] = useState(0);
+  
   // Category & Subcategory states
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -31,6 +34,13 @@ const BudgetAllocation = () => {
 
   // Fetch data on component mount
   useEffect(() => {
+    // Get user's department_id from localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const user = JSON.parse(userData);
+      setUserDeptId(user.department_id || 0);
+    }
+    
     fetchHistory();
     fetchCategories();
   }, []);
@@ -52,25 +62,23 @@ const BudgetAllocation = () => {
   }, [selectedCategory, categories]);
 
   // Format currency helper function
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency: 'PHP',
-    minimumFractionDigits: 2
-  }).format(amount || 0);
-};
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: 2
+    }).format(amount || 0);
+  };
 
-const formatCompactCurrency = (value) => {
-  const num = parseFloat(value || 0);
-
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(num);
-};
-
+  const formatCompactCurrency = (value) => {
+    const num = parseFloat(value || 0);
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(num);
+  };
 
   // Format percentage helper function
   const formatPercentage = (percentage) => {
@@ -81,12 +89,24 @@ const formatCompactCurrency = (value) => {
   const fetchCategories = async () => {
     setLoadingCategories(true);
     try {
-      const response = await fetch("http://localhost/fundmonitor-api/categories.php?action=get_categories");
+      // Get user's department_id from localStorage
+      const userData = localStorage.getItem('user');
+      const user = userData ? JSON.parse(userData) : null;
+      const deptId = user?.department_id;
+      
+      if (!deptId) {
+        console.error('No department_id found for user');
+        setCategories([]);
+        setLoadingCategories(false);
+        return;
+      }
+      
+      // ⭐ FIXED: Now includes department_id filter
+      const response = await fetch(`http://localhost/fundmonitor-api/categories.php?action=get_categories&department_id=${deptId}`);
       const data = await response.json();
       
       if (data.success) {
-        console.log("Categories loaded:", data.categories);
-        // Log the first category to see what fields are available
+        console.log("Categories loaded for department", deptId, ":", data.categories);
         if (data.categories && data.categories.length > 0) {
           console.log("First category structure:", data.categories[0]);
           console.log("Available fields:", Object.keys(data.categories[0]));
@@ -94,9 +114,11 @@ const formatCompactCurrency = (value) => {
         setCategories(data.categories || []);
       } else {
         console.error("Failed to load categories:", data.message);
+        setCategories([]);
       }
     } catch (error) {
       console.error("Failed to fetch categories:", error);
+      setCategories([]);
     } finally {
       setLoadingCategories(false);
     }
@@ -105,28 +127,33 @@ const formatCompactCurrency = (value) => {
   const fetchHistory = async () => {
     setLoadingHistory(true);
     try {
-      // Fetch allocations from allocate.php with GET request for fiscal year 2026
-      const response = await fetch("http://localhost/fundmonitor-api/allocate.php?year=2026");
+      // Get user's department_id from localStorage
+      const userData = localStorage.getItem('user');
+      const user = userData ? JSON.parse(userData) : null;
+      const deptId = user?.department_id;
+      
+      if (!deptId) {
+        console.error('No department_id found for user');
+        setHistory([]);
+        setLoadingHistory(false);
+        return;
+      }
+      
+      // Fetch allocations for this department's categories
+      const response = await fetch(`http://localhost/fundmonitor-api/allocate.php?year=2026&department_id=${deptId}`);
       const data = await response.json();
       
       if (data.success && data.allocations) {
-        // Transform allocations data to history format
         const allocationHistory = data.allocations.map(alloc => {
-          // Calculate percentage from raw allocated amount
-          const percentage = data.total_allocated 
-            ? ((alloc.raw_allocated / parseFloat(data.total_allocated.replace(/₱|,/g, ''))) * 100).toFixed(0)
-            : 0;
-          
           return {
-            department: alloc.department,
+            department: alloc.category, // Changed from department to category
             allocated: alloc.allocated,
             raw_allocated: alloc.raw_allocated,
-            allocation_percentage: parseFloat(percentage)
+            allocation_percentage: parseFloat(alloc.allocation_percentage || 0)
           };
         });
         setHistory(allocationHistory);
       } else {
-        // No allocations found - show empty state
         setHistory([]);
       }
     } catch (error) {
@@ -160,6 +187,7 @@ const formatCompactCurrency = (value) => {
         setResult(data);
         setAmount(""); // Clear input on success
         fetchHistory(); // Refresh history
+        fetchCategories(); // Refresh categories to get updated budgets
       } else {
         setError(data.message);
       }
@@ -192,7 +220,7 @@ const formatCompactCurrency = (value) => {
       allocations: [{
         department: category.name,
         subcategory: subcategory.name,
-        percentage: formatCurrency(subcategory.allocation_amount), // Changed from percentage
+        percentage: formatCurrency(subcategory.allocation_amount),
         amount: formatCurrency(parseFloat(manualAmount)),
         description: subcategory.description || ''
       }]
@@ -208,9 +236,7 @@ const formatCompactCurrency = (value) => {
     const totalBudget = parseFloat(amount);
     if (isNaN(totalBudget) || totalBudget <= 0) return null;
     
-    // Use allocation_amount directly as the suggested amount
     const suggested = parseFloat(subcategory.allocation_amount || 0);
-    
     return suggested.toFixed(2);
   };
 
@@ -251,33 +277,40 @@ const formatCompactCurrency = (value) => {
                 {loading ? "Allocating..." : "Run Auto-Allocation"}
               </Button>
               
+              {/* ⭐ Budget Allocation by Category Display - Now shows only current department's categories */}
               <div className="mt-4 p-4 bg-slate-50 rounded-lg border text-sm space-y-2">
                 <p className="font-bold text-slate-700 mb-2">Budget Allocation by Category:</p>
-                <div className="grid grid-cols-1 gap-2 text-xs text-slate-600">
-                  {categories.map((cat) => {
-                    const allocationPercentage = parseFloat(cat.allocation_percentage || 0);
-                    
-                    return (
-                      <div key={cat.id} className="space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">• {cat.name}</span>
-                          <div className="text-right">
-                            <span className="font-bold text-indigo-600">
-                              {allocationPercentage.toFixed(0)}%
-                            </span>
+                {loadingCategories ? (
+                  <p className="text-xs text-slate-500 text-center py-2">Loading categories...</p>
+                ) : categories.length === 0 ? (
+                  <p className="text-xs text-amber-600 text-center py-2">No categories found. Run allocation first.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 text-xs text-slate-600">
+                    {categories.map((cat) => {
+                      const allocationPercentage = parseFloat(cat.allocation_percentage || 0);
+                      
+                      return (
+                        <div key={cat.id} className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">• {cat.name}</span>
+                            <div className="text-right">
+                              <span className="font-bold text-indigo-600">
+                                {allocationPercentage.toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="w-full bg-slate-200 rounded-full h-1.5">
+                            <div 
+                              className="h-1.5 rounded-full transition-all bg-indigo-500"
+                              style={{ width: `${Math.min(allocationPercentage, 100)}%` }}
+                            ></div>
                           </div>
                         </div>
-                        {/* Progress bar */}
-                        <div className="w-full bg-slate-200 rounded-full h-1.5">
-                          <div 
-                            className="h-1.5 rounded-full transition-all bg-indigo-500"
-                            style={{ width: `${Math.min(allocationPercentage, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -510,7 +543,7 @@ const formatCompactCurrency = (value) => {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Departments Funded:</span>
+                <span className="text-sm text-slate-600">Categories Funded:</span>
                 <span className="font-bold text-indigo-700">{history.length}</span>
               </div>
               <div className="flex justify-between items-center">
@@ -529,7 +562,7 @@ const formatCompactCurrency = (value) => {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">Allocation Method:</span>
-                <span className="font-bold text-indigo-700">Hybrid</span>
+                <span className="font-bold text-indigo-700">Automated</span>
               </div>
             </CardContent>
           </Card>
