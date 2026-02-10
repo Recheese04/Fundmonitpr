@@ -23,6 +23,7 @@ const BudgetAllocation = () => {
   
   // Get user info from localStorage
   const [userDeptId, setUserDeptId] = useState(0);
+  const [userDeptName, setUserDeptName] = useState("");
   
   // Category & Subcategory states
   const [categories, setCategories] = useState([]);
@@ -39,6 +40,7 @@ const BudgetAllocation = () => {
     if (userData) {
       const user = JSON.parse(userData);
       setUserDeptId(user.department_id || 0);
+      setUserDeptName(user.department_name || "Your Department");
     }
     
     fetchHistory();
@@ -101,7 +103,6 @@ const BudgetAllocation = () => {
         return;
       }
       
-      // ⭐ FIXED: Now includes department_id filter
       const response = await fetch(`http://localhost/fundmonitor-api/categories.php?action=get_categories&department_id=${deptId}`);
       const data = await response.json();
       
@@ -170,6 +171,7 @@ const BudgetAllocation = () => {
     setResult(null);
     
     try {
+      // ⭐ CRITICAL FIX: Now includes department_id in the request
       const response = await fetch("http://localhost/fundmonitor-api/allocate.php", {
         method: "POST",
         headers: {
@@ -177,7 +179,8 @@ const BudgetAllocation = () => {
         },
         body: JSON.stringify({ 
           total_fund: parseFloat(amount), 
-          year: 2026 
+          year: 2026,
+          department_id: userDeptId  // ⭐ Added department_id
         }),
       });
       
@@ -257,7 +260,9 @@ const BudgetAllocation = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Total Annual Fund</label>
+                <label className="text-sm font-medium text-slate-700">
+                  Total Department Budget for {userDeptName}
+                </label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input 
@@ -272,12 +277,12 @@ const BudgetAllocation = () => {
               <Button 
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
                 onClick={handleAutoAllocate}
-                disabled={loading || !amount}
+                disabled={loading || !amount || userDeptId === 0}
               >
-                {loading ? "Allocating..." : "Run Auto-Allocation"}
+                {loading ? "Allocating..." : `Allocate to ${userDeptName}`}
               </Button>
               
-              {/* ⭐ Budget Allocation by Category Display - Now shows only current department's categories */}
+              {/* Budget Allocation by Category Display */}
               <div className="mt-4 p-4 bg-slate-50 rounded-lg border text-sm space-y-2">
                 <p className="font-bold text-slate-700 mb-2">Budget Allocation by Category:</p>
                 {loadingCategories ? (
@@ -426,36 +431,56 @@ const BudgetAllocation = () => {
                   <div>
                     <p className="font-bold text-green-900 text-lg">{result.message}</p>
                     {!result.manual && (
-                      <p className="text-sm text-green-700 mt-1">
-                        Total Fund: <strong>{result.total_fund}</strong> | 
-                        Allocated: <strong>{result.total_allocated}</strong>
-                      </p>
+                      <div className="text-sm text-green-700 mt-2 space-y-1">
+                        <p>Department: <strong>{result.department}</strong></p>
+                        <p>Total Fund: <strong>{result.total_fund}</strong></p>
+                        <p>Allocated: <strong>{result.total_allocated}</strong></p>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-3 mt-4">
-                  <p className="font-semibold text-slate-700 text-sm">
-                    {result.manual ? "Allocation Preview:" : "Allocation Breakdown:"}
-                  </p>
-                  {result.allocations.map((alloc, idx) => (
-                    <div key={idx} className="bg-white p-4 rounded-lg border border-green-200">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-bold text-slate-900">{alloc.department}</p>
-                          {alloc.subcategory && (
-                            <p className="text-xs text-indigo-600 font-medium mt-1">→ {alloc.subcategory}</p>
-                          )}
-                          <p className="text-xs text-slate-500 mt-1">{alloc.description}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-green-700 text-lg">{alloc.amount}</p>
-                          <p className="text-xs text-slate-600">{alloc.percentage}</p>
+                {!result.manual && result.category_breakdown && (
+                  <div className="space-y-3 mt-4">
+                    <p className="font-semibold text-slate-700 text-sm">Category Breakdown:</p>
+                    {result.category_breakdown.map((alloc, idx) => (
+                      <div key={idx} className="bg-white p-4 rounded-lg border border-green-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="font-bold text-slate-900">{alloc.category}</p>
+                            <p className="text-xs text-slate-500 mt-1">{alloc.percentage}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-green-700 text-lg">{alloc.amount}</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
+
+                {result.manual && result.allocations && (
+                  <div className="space-y-3 mt-4">
+                    <p className="font-semibold text-slate-700 text-sm">Allocation Preview:</p>
+                    {result.allocations.map((alloc, idx) => (
+                      <div key={idx} className="bg-white p-4 rounded-lg border border-green-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="font-bold text-slate-900">{alloc.department}</p>
+                            {alloc.subcategory && (
+                              <p className="text-xs text-indigo-600 font-medium mt-1">→ {alloc.subcategory}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1">{alloc.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-green-700 text-lg">{alloc.amount}</p>
+                            <p className="text-xs text-slate-600">{alloc.percentage}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -542,6 +567,10 @@ const BudgetAllocation = () => {
               <CardTitle className="text-indigo-900">Quick Stats</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-600">Department:</span>
+                <span className="font-bold text-indigo-700">{userDeptName}</span>
+              </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">Categories Funded:</span>
                 <span className="font-bold text-indigo-700">{history.length}</span>
