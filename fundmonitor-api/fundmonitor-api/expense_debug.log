@@ -1,0 +1,180 @@
+2026-02-07 11:55:28 - Request received
+POST data: Array
+(
+    [id] => 2
+    [status] => approved
+)
+
+Raw input: 
+Expense ID: 2
+Query 1: SELECT id, amount, subcategory_id, status FROM expenses WHERE id = ? with ID=2
+Expense data: Array
+(
+    [id] => 2
+    [amount] => 12.00
+    [subcategory_id] => 13
+    [status] => rejected
+)
+
+Amount: 12, Subcategory ID: 13
+Query 2: SELECT id, name, allocation_amount, remaining_budget FROM sub_categories WHERE id = ? with ID=13
+Subcategory BEFORE: Array
+(
+    [id] => 13
+    [name] => 3242
+    [allocation_amount] => 200.00
+    [remaining_budget] => 164.00
+)
+
+Current budget: 164, Amount to deduct: 12
+Query 3: UPDATE sub_categories SET remaining_budget = ? WHERE id = ? with newBudget=152, ID=13
+Update executed: 1, Affected rows: 1, Error: 
+Subcategory AFTER: Array
+(
+    [remaining_budget] => 152.00
+)
+
+Query 4: UPDATE expenses SET status = 'approved' WHERE id = ? with ID=2
+Expense approval affected rows: 1
+SUCCESS: Array
+(
+    [success] => 1
+    [message] => Expense approved successfully!
+    [debug] => Array
+        (
+            [expense_id] => 2
+            [amount_deducted] => 12
+            [subcategory_id] => 13
+            [subcategory_name] => 3242
+            [budget_before] => 164
+            [budget_after] => 152
+            [new_budget_calculated] => 152
+            [update_affected_rows] => 1
+            [approve_affected_rows] => 1
+        )
+
+)
+
+
+2026-03-10 01:57:18 - Request received
+POST data: Array
+(
+    [id] => 4
+    [status] => approved
+)
+
+Raw input: 
+Expense ID: 4
+Query 1: SELECT id, amount, subcategory_id, status FROM expenses WHERE id = ? with ID=4
+Expense data: Array
+(
+    [id] => 4
+    [amount] => 123.00
+    [subcategory_id] => 9
+    [status] => pending
+)
+
+Amount: 123, Subcategory ID: 9
+Query 2: SELECT id, name, allocation_amount, remaining_budget FROM sub_categories WHERE id = ? with ID=9
+Subcategory BEFORE: Array
+(
+    [id] => 9
+    [name] => Digital Resources
+    [allocation_amount] => 0.00
+    [remaining_budget] => 0.00
+)
+
+Current budget: 0, Amount to deduct: 123
+ERROR: Insufficient budget! Available: PHP 0.00, Required: PHP 123.00 (Category: Digital Resources)
+#0 {main}
+
+2026-03-23 08:21:50 - Request received
+POST data: Array
+(
+    [id] => 5
+    [status] => approved
+)
+
+Raw input: 
+Expense ID: 5
+Query 1: SELECT id, amount, subcategory_id, status FROM expenses WHERE id = ? with ID=5
+Expense data: Array
+(
+    [id] => 5
+    [amount] => 2.00
+    [subcategory_id] => 13
+    [status] => rejected
+)
+
+Amount: 2, Subcategory ID: 13
+Query 2: SELECT id, name, allocation_amount, remaining_budget FROM sub_categories WHERE id = ? with ID=13
+Subcategory BEFORE: Array
+(
+    [id] => 13
+    [name] => 3242
+    [allocation_amount] => 0.00
+    [remaining_budget] => 0.00
+)
+
+Current budget: 0, Amount to deduct: 2
+ERROR: Insufficient budget! Available: PHP 0.00, Required: PHP 2.00 (Category: 3242)
+#0 {main}
+
+2026-03-23 10:22:45 - Request received
+POST data: Array
+(
+    [id] => 1
+    [status] => approved
+)
+
+Raw input: 
+Expense ID: 1
+Query 1: SELECT id, amount, subcategory_id, status FROM expenses WHERE id = ? with ID=1
+Expense data: Array
+(
+    [id] => 1
+    [amount] => 1.00
+    [subcategory_id] => 37
+    [status] => pending
+)
+
+Amount: 1, Subcategory ID: 37
+Query 2: SELECT id, name, allocation_amount, remaining_budget FROM sub_categories WHERE id = ? with ID=37
+Subcategory BEFORE: Array
+(
+    [id] => 37
+    [name] => Digital Resources
+    [allocation_amount] => 2.00
+    [remaining_budget] => 2.00
+)
+
+Current budget: 2, Amount to deduct: 1
+Query 3: UPDATE sub_categories SET remaining_budget = ? WHERE id = ? with newBudget=1, ID=37
+Update executed: 1, Affected rows: 1, Error: 
+Subcategory AFTER: Array
+(
+    [remaining_budget] => 1.00
+)
+
+Query 4: UPDATE expenses SET status = 'approved' WHERE id = ? with ID=1
+Expense approval affected rows: 1
+SUCCESS: Array
+(
+    [success] => 1
+    [message] => Expense approved successfully!
+    [debug] => Array
+        (
+            [expense_id] => 1
+            [amount_deducted] => 1
+            [subcategory_id] => 37
+            [subcategory_name] => Digital Resources
+            [budget_before] => 2
+            [budget_after] => 1
+            [new_budget_calculated] => 1
+            [update_affected_rows] => 1
+            [approve_affected_rows] => 1
+        )
+
+)
+
+
