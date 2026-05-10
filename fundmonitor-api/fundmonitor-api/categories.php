@@ -47,13 +47,7 @@ set_error_handler(function($errno, $errstr, $errfile, $errline) {
 });
 
 // Database configuration
-$host = 'localhost';
-$dbname = 'fundmonitor_db';
-$username = 'root';
-$password = '';
-
-// Create connection
-$conn = @mysqli_connect($host, $username, $password, $dbname);
+require_once 'config/db.php';
 
 if (!$conn) {
     echo json_encode([

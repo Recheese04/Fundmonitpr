@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     exit();
 }
 
-$conn = mysqli_connect("localhost", "root", "", "fundmonitor_db");
+require_once 'config/db.php';
 
 $action = $_GET['action'] ?? '';
 

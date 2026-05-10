@@ -4,7 +4,7 @@ header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE");
 header("Access-Control-Allow-Headers: Content-Type");
 header('Content-Type: application/json');
 
-$conn = mysqli_connect("localhost", "root", "", "fundmonitor_db");
+require_once 'config/db.php';
 if (!$conn) {
     echo json_encode(["success" => false, "message" => "Database Connection Failed"]);
     exit;

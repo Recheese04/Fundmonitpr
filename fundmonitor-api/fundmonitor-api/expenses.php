@@ -6,7 +6,7 @@ header("Content-Type: application/json");
 error_reporting(0);
 ini_set('display_errors', 0);
 
-$conn = mysqli_connect("localhost", "root", "", "fundmonitor_db");
+require_once 'config/db.php';
 
 $action = $_GET['action'] ?? '';
 
