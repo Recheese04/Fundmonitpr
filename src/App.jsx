@@ -1,12 +1,13 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React from 'react';
+import { Toaster } from 'react-hot-toast';
 
 // Public Pages
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/auth/LoginPage';
 
 // Admin Pages
-import AdminOverview from './pages/dashboards/admin/AdminOverview';
+import AdminDashboard from './pages/dashboards/admin/AdminDashboard';
 import AdminBudgets from './pages/dashboards/admin/AdminBudgets';
 import AdminReports from './pages/dashboards/admin/AdminReports';
 import UserManagement from './pages/dashboards/admin/UserManagement';
@@ -21,7 +22,6 @@ import CategoryManager from './pages/dashboards/dept-head/CategoryManager';
 
 // Staff Pages
 import StaffDashboard from './pages/dashboards/staff/StaffDashboard';
-import StaffRequest from './pages/dashboards/staff/StaffRequest';
 import StaffHistory from './pages/dashboards/staff/StaffHistory';
 import StaffAlerts from './pages/dashboards/staff/StaffAlerts';
 import StaffSettings from './pages/dashboards/staff/StaffSettings';
@@ -53,13 +53,14 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 function App() {
   return (
     <Router>
+      <Toaster position="top-right" />
       <Routes>
         {/* Public Access */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         
         {/* ADMIN SECTION */}
-        <Route path="/admin-dashboard" element={<ProtectedRoute allowedRole="admin"><AdminOverview /></ProtectedRoute>} />
+        <Route path="/admin-dashboard" element={<ProtectedRoute allowedRole="admin"><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin-budgets" element={<ProtectedRoute allowedRole="admin"><AdminBudgets /></ProtectedRoute>} />
         <Route path="/admin-users" element={<ProtectedRoute allowedRole="admin"><UserManagement /></ProtectedRoute>} />
         <Route path="/admin-reports" element={<ProtectedRoute allowedRole="admin"><AdminReports /></ProtectedRoute>} />
@@ -76,7 +77,6 @@ function App() {
         <Route path="/staff-dashboard" element={<ProtectedRoute allowedRole="staff"><StaffDashboard /></ProtectedRoute>} />
         {/* IMPORTANT: This handles the new printable budget view for staff */}
         <Route path="/staff-budget-tracker" element={<ProtectedRoute allowedRole="staff"><StaffBudgetTracker /></ProtectedRoute>} />
-        <Route path="/staff-request" element={<ProtectedRoute allowedRole="staff"><StaffRequest /></ProtectedRoute>} />
         <Route path="/staff-history" element={<ProtectedRoute allowedRole="staff"><StaffHistory /></ProtectedRoute>} />
         <Route path="/staff-alerts" element={<ProtectedRoute allowedRole="staff"><StaffAlerts /></ProtectedRoute>} />
         <Route path="/staff-settings" element={<ProtectedRoute allowedRole="staff"><StaffSettings /></ProtectedRoute>} />

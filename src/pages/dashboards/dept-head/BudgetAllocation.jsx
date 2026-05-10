@@ -1,628 +1,512 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { 
-  Calculator, 
-  CheckCircle, 
-  AlertCircle, 
-  History, 
-  RefreshCw,
-  TrendingUp,
-  DollarSign
-} from "lucide-react";
-import DeptLayout from "../../../components/layout/DeptLayout";
+import React, { useState, useEffect } from "react";
+import API_URL from "@/apiConfig";
+import UnifiedLayout from "@/components/layout/UnifiedLayout";
+import { RefreshCw } from "lucide-react";
 
-const BudgetAllocation = () => {
+// --- HELPERS ---
+const fmt = (v) =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2 }).format(v || 0);
+
+const fmtCompact = (v) =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", notation: "compact", maximumFractionDigits: 1 }).format(v || 0);
+
+// --- SUBCOMPONENTS ---
+
+function ModeTab({ active, label, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "6px 18px", fontSize: 12, fontWeight: 700,
+      borderRadius: 6, border: "none", cursor: "pointer",
+      transition: "all 0.15s ease",
+      background: active ? "#0f172a" : "transparent",
+      color: active ? "#fde68a" : "#94a3b8",
+      fontFamily: "inherit",
+    }}>{label}</button>
+  );
+}
+
+function BarRow({ label, pct }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#d97706", fontVariantNumeric: "tabular-nums" }}>{pct}%</span>
+      </div>
+      <div style={{ height: 4, background: "#f1f5f9", borderRadius: 99, overflow: "hidden" }}>
+        <div style={{
+          height: "100%", width: `${pct}%`,
+          background: "linear-gradient(90deg, #f5a82b, #fbbf24)",
+          borderRadius: 99,
+          transition: "width 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
+          boxShadow: "0 0 6px rgba(245,168,43,0.3)",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+function LedgerRow({ item, index, total }) {
+  const [hovered, setHovered] = useState(false);
+  const parts = (item.allocated || "0.00").split(".");
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding: "12px 14px", borderRadius: 10,
+        background: hovered ? "#fffbeb" : "transparent",
+        border: `1px solid ${hovered ? "rgba(245,168,43,0.25)" : "transparent"}`,
+        transition: "all 0.15s ease", cursor: "default",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, letterSpacing: "0.08em", margin: "0 0 2px", fontFamily: "monospace" }}>
+            #{String(total - index).padStart(3, "0")}
+          </p>
+          <p style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.department}
+          </p>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+          <span style={{
+            display: "inline-block", fontSize: 10, fontWeight: 700,
+            color: "#d97706", background: "#fffbeb",
+            padding: "2px 8px", borderRadius: 5, marginBottom: 4,
+          }}>{item.allocation_percentage.toFixed(0)}% share</span>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#0f172a", fontVariantNumeric: "tabular-nums", lineHeight: 1, fontFamily: "'IBM Plex Mono', monospace" }}>
+            {parts[0]}<span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>.{parts[1]}</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackBox({ type, message }) {
+  const c = type === "error"
+    ? { bg: "#fff1f2", border: "#fecdd3", dot: "#e11d48", text: "#9f1239", label: "Error" }
+    : { bg: "#fffbeb", border: "rgba(245,168,43,0.3)", dot: "#f5a82b", text: "#92400e", label: "Success" };
+  return (
+    <div style={{
+      padding: "13px 16px", background: c.bg,
+      border: `1px solid ${c.border}`, borderRadius: 10,
+      display: "flex", alignItems: "flex-start", gap: 12,
+      marginTop: 16, animation: "fadeIn 0.2s ease",
+    }}>
+      <div style={{ width: 8, height: 8, borderRadius: "50%", background: c.dot, flexShrink: 0, marginTop: 4 }} />
+      <div>
+        <p style={{ fontSize: 11, fontWeight: 700, color: c.text, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.07em" }}>{c.label}</p>
+        <p style={{ fontSize: 13, color: c.text, margin: 0 }}>{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function ResultGrid({ breakdowns }) {
+  return (
+    <div style={{ marginTop: 18, padding: 18, background: "#fffbeb", border: "1px solid rgba(245,168,43,0.2)", borderRadius: 12 }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: "#d97706", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 14px" }}>Allocation breakdown</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+        {breakdowns.map((item, i) => (
+          <div key={i} style={{ background: "#fff", border: "1px solid rgba(245,168,43,0.15)", borderRadius: 10, padding: "13px 15px" }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", margin: "0 0 5px", textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.category}</p>
+            <p style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", margin: "0 0 7px", fontFamily: "'IBM Plex Mono', monospace" }}>{item.amount}</p>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#d97706", background: "#fffbeb", padding: "2px 7px", borderRadius: 5 }}>
+              {item.percentage} of total
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// --- MAIN COMPONENT ---
+export default function BudgetAllocation() {
+  const [mode, setMode] = useState("auto");
   const [amount, setAmount] = useState("");
+  const [manualAmount, setManualAmount] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedSubcategory, setSelectedSubcategory] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [filteredSubs, setFilteredSubs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  
-  // Get user info from localStorage
+  const [availableYears, setAvailableYears] = useState([]);
+  const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
   const [userDeptId, setUserDeptId] = useState(0);
   const [userDeptName, setUserDeptName] = useState("");
-  
-  // Category & Subcategory states
-  const [categories, setCategories] = useState([]);
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [filteredSubcategories, setFilteredSubcategories] = useState([]);
-  const [selectedSubcategory, setSelectedSubcategory] = useState("");
-  const [manualAmount, setManualAmount] = useState("");
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Fetch data on component mount
   useEffect(() => {
-    // Get user's department_id from localStorage
-    const userData = localStorage.getItem('user');
+    const userData = localStorage.getItem("user");
     if (userData) {
       const user = JSON.parse(userData);
       setUserDeptId(user.department_id || 0);
-      setUserDeptName(user.department_name || "Your Department");
+      setUserDeptName(user.department_name || "Unnamed Department");
     }
-    
-    fetchHistory();
-    fetchCategories();
+    fetchHistory(); fetchCategories(); fetchYears();
   }, []);
 
-  // Filter subcategories when category changes
+  useEffect(() => { fetchHistory(yearFilter); fetchCategories(yearFilter); }, [yearFilter]);
+
   useEffect(() => {
     if (selectedCategory) {
-      const category = categories.find(cat => cat.id.toString() === selectedCategory.toString());
-      if (category && category.subcategories) {
-        setFilteredSubcategories(category.subcategories);
-      } else {
-        setFilteredSubcategories([]);
-      }
-      setSelectedSubcategory(""); // Reset subcategory when category changes
-    } else {
-      setFilteredSubcategories([]);
+      const cat = categories.find((c) => c.id.toString() === selectedCategory.toString());
+      setFilteredSubs(cat?.subcategories || []);
       setSelectedSubcategory("");
+    } else {
+      setFilteredSubs([]); setSelectedSubcategory("");
     }
   }, [selectedCategory, categories]);
 
-  // Format currency helper function
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
-      minimumFractionDigits: 2
-    }).format(amount || 0);
-  };
-
-  const formatCompactCurrency = (value) => {
-    const num = parseFloat(value || 0);
-    return new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: "PHP",
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(num);
-  };
-
-  // Format percentage helper function
-  const formatPercentage = (percentage) => {
-    const num = parseFloat(percentage || 0);
-    return `${num.toFixed(2)}%`;
-  };
-
-  const fetchCategories = async () => {
-    setLoadingCategories(true);
+  const fetchCategories = async (year = yearFilter) => {
     try {
-      // Get user's department_id from localStorage
-      const userData = localStorage.getItem('user');
-      const user = userData ? JSON.parse(userData) : null;
-      const deptId = user?.department_id;
-      
-      if (!deptId) {
-        console.error('No department_id found for user');
-        setCategories([]);
-        setLoadingCategories(false);
-        return;
-      }
-      
-      const response = await fetch(`http://localhost/fundmonitor-api/categories.php?action=get_categories&department_id=${deptId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        console.log("Categories loaded for department", deptId, ":", data.categories);
-        if (data.categories && data.categories.length > 0) {
-          console.log("First category structure:", data.categories[0]);
-          console.log("Available fields:", Object.keys(data.categories[0]));
-        }
-        setCategories(data.categories || []);
-      } else {
-        console.error("Failed to load categories:", data.message);
-        setCategories([]);
-      }
-    } catch (error) {
-      console.error("Failed to fetch categories:", error);
-      setCategories([]);
-    } finally {
-      setLoadingCategories(false);
-    }
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (!user.department_id) return;
+      const res = await fetch(`${API_URL}/categories.php?action=get_categories&department_id=${user.department_id}&year=${year}`);
+      const data = await res.json();
+      if (data.success) setCategories(data.categories || []);
+    } catch (e) { console.error(e); }
   };
 
-  const fetchHistory = async () => {
+  const fetchYears = async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin_actions.php?action=get_years`);
+      const data = await res.json();
+      setAvailableYears(Array.isArray(data) ? data : []);
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchHistory = async (year = yearFilter) => {
     setLoadingHistory(true);
     try {
-      // Get user's department_id from localStorage
-      const userData = localStorage.getItem('user');
-      const user = userData ? JSON.parse(userData) : null;
-      const deptId = user?.department_id;
-      
-      if (!deptId) {
-        console.error('No department_id found for user');
-        setHistory([]);
-        setLoadingHistory(false);
-        return;
-      }
-      
-      // Fetch allocations for this department's categories
-      const response = await fetch(`http://localhost/fundmonitor-api/allocate.php?year=2026&department_id=${deptId}`);
-      const data = await response.json();
-      
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (!user.department_id) { setHistory([]); return; }
+      const res = await fetch(`${API_URL}/allocate.php?year=${year}&department_id=${user.department_id}`);
+      const data = await res.json();
       if (data.success && data.allocations) {
-        const allocationHistory = data.allocations.map(alloc => {
-          return {
-            department: alloc.category, // Changed from department to category
-            allocated: alloc.allocated,
-            raw_allocated: alloc.raw_allocated,
-            allocation_percentage: parseFloat(alloc.allocation_percentage || 0)
-          };
-        });
-        setHistory(allocationHistory);
-      } else {
-        setHistory([]);
-      }
-    } catch (error) {
-      console.error("Failed to fetch history:", error);
-      setHistory([]);
-    } finally {
-      setLoadingHistory(false);
-    }
+        setHistory(data.allocations.map((a) => ({
+          department: a.category,
+          allocated: a.allocated,
+          raw_allocated: a.raw_allocated,
+          allocation_percentage: parseFloat(a.allocation_percentage || 0),
+        })));
+      } else setHistory([]);
+    } catch (e) { setHistory([]); }
+    finally { setLoadingHistory(false); }
   };
 
   const handleAutoAllocate = async () => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    
+    const total = parseFloat(amount);
+    if (!total || total <= 0) { setError("Enter a valid fund amount."); return; }
+    setLoading(true); setError(null); setResult(null);
     try {
-      // ⭐ CRITICAL FIX: Now includes department_id in the request
-      const response = await fetch("http://localhost/fundmonitor-api/allocate.php", {
+      const res = await fetch(`${API_URL}/allocate.php`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          total_fund: parseFloat(amount), 
-          year: 2026,
-          department_id: userDeptId  // ⭐ Added department_id
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ total_fund: total, year: yearFilter, department_id: userDeptId }),
       });
-      
-      const data = await response.json();
-      
+      const data = await res.json();
       if (data.success) {
-        setResult(data);
-        setAmount(""); // Clear input on success
-        fetchHistory(); // Refresh history
-        fetchCategories(); // Refresh categories to get updated budgets
-      } else {
-        setError(data.message);
-      }
-    } catch (error) {
-      setError("Error connecting to server: " + error.message);
-    } finally {
-      setLoading(false);
-    }
+        setResult({ type: "auto", message: data.message, breakdowns: data.category_breakdown });
+        setAmount(""); fetchHistory(); fetchCategories();
+      } else setError(data.message);
+    } catch (e) { setError("Error connecting to server."); }
+    finally { setLoading(false); }
   };
 
   const handleManualAllocate = () => {
     if (!selectedCategory || !selectedSubcategory || !manualAmount) {
-      setError("Please select a category, sub-category, and enter an amount");
-      return;
+      setError("Fill in all fields before verifying."); return;
     }
-
-    const category = categories.find(cat => cat.id.toString() === selectedCategory.toString());
-    const subcategory = filteredSubcategories.find(sub => sub.id.toString() === selectedSubcategory.toString());
-    
-    if (!category || !subcategory) {
-      setError("Invalid category or sub-category selection");
-      return;
-    }
-
+    const cat = categories.find((c) => c.id.toString() === selectedCategory.toString());
+    const sub = filteredSubs.find((s) => s.id.toString() === selectedSubcategory.toString());
     setError(null);
     setResult({
-      success: true,
-      message: "✅ Manual allocation preview",
-      manual: true,
-      allocations: [{
-        department: category.name,
-        subcategory: subcategory.name,
-        percentage: formatCurrency(subcategory.allocation_amount),
-        amount: formatCurrency(parseFloat(manualAmount)),
-        description: subcategory.description || ''
-      }]
+      type: "manual",
+      message: `Manual allocation verified — ${cat?.name} › ${sub?.name}.`,
+      item: { category: cat?.name, subcategory: sub?.name, amount: fmt(parseFloat(manualAmount)), desc: sub?.description },
     });
   };
 
-  const calculateSuggestedAmount = () => {
-    if (!selectedSubcategory || !amount) return null;
-    
-    const subcategory = filteredSubcategories.find(sub => sub.id.toString() === selectedSubcategory.toString());
-    if (!subcategory) return null;
-    
-    const totalBudget = parseFloat(amount);
-    if (isNaN(totalBudget) || totalBudget <= 0) return null;
-    
-    const suggested = parseFloat(subcategory.allocation_amount || 0);
-    return suggested.toFixed(2);
+  const totalAllocated = history.reduce((s, i) => s + (parseFloat(i.raw_allocated) || 0), 0);
+
+  const inputStyle = {
+    width: "100%", padding: "11px 14px",
+    border: "1px solid #e2e8f0", borderRadius: 10,
+    fontSize: 14, fontWeight: 500, color: "#0f172a",
+    background: "#fff", outline: "none",
+    boxSizing: "border-box",
+    transition: "border-color 0.15s ease",
+    appearance: "none", WebkitAppearance: "none",
+    fontFamily: "inherit",
   };
 
-  const suggestedAmount = calculateSuggestedAmount();
+  const labelStyle = {
+    display: "block", fontSize: 11, fontWeight: 700,
+    color: "#64748b", textTransform: "uppercase",
+    letterSpacing: "0.08em", marginBottom: 6,
+  };
+
+  const disabledBtn = loading || !amount || userDeptId === 0;
+  const disabledManual = !selectedCategory || !selectedSubcategory || !manualAmount;
 
   return (
-    <DeptLayout title="Budget Allocation">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column - Allocation Tools */}
-        <div className="space-y-6">
-          {/* Auto-Allocation Card */}
-          <Card className="shadow-lg border-indigo-200">
-            <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50">
-              <CardTitle className="flex items-center gap-2 text-indigo-900">
-                <Calculator className="w-5 h-5" /> 
-                Automated Budget Allocation
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Total Department Budget for {userDeptName}
-                </label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input 
-                    type="number" 
-                    placeholder="Enter total amount (e.g. 500000)" 
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="pl-10"
-                  />
+    <UnifiedLayout title="Budget Allocation" subtitle={`Fiscal Year ${yearFilter} — ${userDeptName}`}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Outfit:wght@400;500;600;700;800&display=swap');
+        .ba-root * { box-sizing: border-box; font-family: 'Outfit', sans-serif; }
+        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+        input::placeholder { color: #cbd5e1; }
+        .focus-gold:focus { border-color: #f5a82b !important; outline: none; }
+        .btn-deploy { transition: background 0.15s ease, box-shadow 0.15s ease; }
+        .btn-deploy:not(:disabled):hover { background: #1e293b !important; box-shadow: 0 4px 16px rgba(245,168,43,0.15); }
+        .btn-verify:not(:disabled):hover { background: #1e293b !important; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+
+      <div className="ba-root" style={{ display: "flex", flexDirection: "column", gap: 20, paddingBottom: 48 }}>
+
+        {/* HEADER ROW */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {[
+              { label: "Total Allocated", value: fmtCompact(totalAllocated) },
+              { label: "Categories Funded", value: history.length },
+            ].map((s, i) => (
+              <div key={i} style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 12, padding: "12px 18px" }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 3px" }}>{s.label}</p>
+                <p style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+          <div style={{ position: "relative" }}>
+            <select
+              value={yearFilter}
+              onChange={(e) => setYearFilter(e.target.value)}
+              style={{ ...inputStyle, width: "auto", paddingRight: 32, fontSize: 12, fontWeight: 700, color: "#d97706", background: "#fffbeb", border: "1px solid rgba(245,168,43,0.25)", cursor: "pointer" }}
+            >
+              {availableYears.map((y) => <option key={y.year} value={y.year}>FY {y.year}</option>)}
+            </select>
+            <svg style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} width="10" height="6" viewBox="0 0 10 6" fill="none">
+              <path d="M1 1L5 5L9 1" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        {/* MAIN GRID */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, alignItems: "start" }}>
+
+          {/* LEFT */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 16, overflow: "hidden" }}>
+
+              {/* Card header */}
+              <div style={{ padding: "14px 22px", borderBottom: "1px solid #f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 30, height: 30, background: "#fffbeb", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                      <rect x="1" y="7" width="4" height="8" rx="1" fill="#f5a82b" />
+                      <rect x="6" y="4" width="4" height="11" rx="1" fill="#fbbf24" />
+                      <rect x="11" y="1" width="4" height="14" rx="1" fill="#fde68a" />
+                    </svg>
+                  </div>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Allocation suite</span>
+                </div>
+                <div style={{ display: "flex", background: "#f1f5f9", borderRadius: 7, padding: 3, gap: 2 }}>
+                  <ModeTab active={mode === "auto"} label="Auto" onClick={() => { setMode("auto"); setResult(null); setError(null); }} />
+                  <ModeTab active={mode === "manual"} label="Manual" onClick={() => { setMode("manual"); setResult(null); setError(null); }} />
                 </div>
               </div>
-              <Button 
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-                onClick={handleAutoAllocate}
-                disabled={loading || !amount || userDeptId === 0}
-              >
-                {loading ? "Allocating..." : `Allocate to ${userDeptName}`}
-              </Button>
-              
-              {/* Budget Allocation by Category Display */}
-              <div className="mt-4 p-4 bg-slate-50 rounded-lg border text-sm space-y-2">
-                <p className="font-bold text-slate-700 mb-2">Budget Allocation by Category:</p>
-                {loadingCategories ? (
-                  <p className="text-xs text-slate-500 text-center py-2">Loading categories...</p>
-                ) : categories.length === 0 ? (
-                  <p className="text-xs text-amber-600 text-center py-2">No categories found. Run allocation first.</p>
+
+              {/* Card body */}
+              <div style={{ padding: 22 }}>
+                {mode === "auto" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
+                    <div>
+                      <label style={labelStyle}>Fund injection (PHP)</label>
+                      <div style={{ position: "relative" }}>
+                        <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 14, fontWeight: 600, color: "#94a3b8" }}>₱</span>
+                        <input
+                          type="number" className="focus-gold" placeholder="0.00"
+                          value={amount} onChange={(e) => setAmount(e.target.value)}
+                          style={{ ...inputStyle, paddingLeft: 28, fontSize: 22, fontWeight: 800, fontFamily: "'IBM Plex Mono', monospace" }}
+                        />
+                      </div>
+                      <p style={{ fontSize: 11, color: "#94a3b8", margin: "7px 0 18px 2px" }}>
+                        Distributed by category ratios defined on the right.
+                      </p>
+                      <button className="btn-deploy" onClick={handleAutoAllocate} disabled={disabledBtn} style={{
+                        width: "100%", padding: "12px 0",
+                        background: disabledBtn ? "#f1f5f9" : "#0f172a",
+                        color: disabledBtn ? "#94a3b8" : "#fde68a",
+                        border: disabledBtn ? "1px solid #e2e8f0" : "1px solid rgba(245,168,43,0.2)",
+                        borderRadius: 10, fontSize: 13, fontWeight: 700,
+                        cursor: disabledBtn ? "not-allowed" : "pointer",
+                        letterSpacing: "0.04em",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                        fontFamily: "inherit",
+                      }}>
+                        {loading
+                          ? <><div style={{ width: 13, height: 13, border: "2px solid rgba(253,230,138,0.3)", borderTopColor: "#fde68a", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />Processing…</>
+                          : "Deploy budget"
+                        }
+                      </button>
+                    </div>
+
+                    <div style={{ background: "#fafafa", border: "1px solid #f1f5f9", borderRadius: 12, padding: "16px 18px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>Distribution rules</p>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#d97706", background: "#fffbeb", padding: "2px 8px", borderRadius: 5 }}>Standard</span>
+                      </div>
+                      {categories.slice(0, 4).map((cat) => (
+                        <BarRow key={cat.id} label={cat.name} pct={parseFloat(cat.allocation_percentage || 0).toFixed(0)} />
+                      ))}
+                      {categories.length > 4 && (
+                        <p style={{ fontSize: 10, color: "#94a3b8", textAlign: "center", margin: "8px 0 0", fontWeight: 700 }}>
+                          + {categories.length - 4} more categories
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-2 text-xs text-slate-600">
-                    {categories.map((cat) => {
-                      const allocationPercentage = parseFloat(cat.allocation_percentage || 0);
-                      
-                      return (
-                        <div key={cat.id} className="space-y-1">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">• {cat.name}</span>
-                            <div className="text-right">
-                              <span className="font-bold text-indigo-600">
-                                {allocationPercentage.toFixed(0)}%
-                              </span>
-                            </div>
-                          </div>
-                          {/* Progress bar */}
-                          <div className="w-full bg-slate-200 rounded-full h-1.5">
-                            <div 
-                              className="h-1.5 rounded-full transition-all bg-indigo-500"
-                              style={{ width: `${Math.min(allocationPercentage, 100)}%` }}
-                            ></div>
-                          </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div>
+                        <label style={labelStyle}>Category</label>
+                        <select className="focus-gold" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}
+                          style={{ ...inputStyle, cursor: "pointer" }}>
+                          <option value="">Select category</option>
+                          {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Sub-category</label>
+                        <select className="focus-gold" value={selectedSubcategory} onChange={(e) => setSelectedSubcategory(e.target.value)}
+                          disabled={!selectedCategory}
+                          style={{ ...inputStyle, cursor: selectedCategory ? "pointer" : "not-allowed", opacity: selectedCategory ? 1 : 0.5 }}>
+                          <option value="">Select item</option>
+                          {filteredSubs.map((sub) => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div>
+                        <label style={labelStyle}>Amount (PHP)</label>
+                        <div style={{ position: "relative" }}>
+                          <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 14, fontWeight: 600, color: "#94a3b8" }}>₱</span>
+                          <input type="number" className="focus-gold" placeholder="0.00" value={manualAmount}
+                            onChange={(e) => setManualAmount(e.target.value)}
+                            style={{ ...inputStyle, paddingLeft: 28, fontFamily: "'IBM Plex Mono', monospace" }} />
                         </div>
-                      );
-                    })}
+                        {selectedSubcategory && (() => {
+                          const sub = filteredSubs.find((s) => s.id.toString() === selectedSubcategory.toString());
+                          return sub ? (
+                            <p style={{ fontSize: 11, color: "#94a3b8", margin: "6px 0 0", fontStyle: "italic" }}>
+                              Suggested: {fmt(sub.allocation_amount)} — {sub.description}
+                            </p>
+                          ) : null;
+                        })()}
+                      </div>
+                      <button className="btn-verify" onClick={handleManualAllocate} disabled={disabledManual} style={{
+                        width: "100%", padding: "12px 0",
+                        background: disabledManual ? "#f1f5f9" : "#0f172a",
+                        color: disabledManual ? "#94a3b8" : "#fde68a",
+                        border: disabledManual ? "1px solid #e2e8f0" : "1px solid rgba(245,168,43,0.2)",
+                        borderRadius: 10, fontSize: 13, fontWeight: 700,
+                        cursor: disabledManual ? "not-allowed" : "pointer",
+                        letterSpacing: "0.04em", transition: "background 0.15s ease",
+                        fontFamily: "inherit", marginTop: "auto",
+                      }}>Verify allocation</button>
+                    </div>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Manual Allocation Card */}
-          <Card className="shadow-lg border-emerald-200">
-            <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50">
-              <CardTitle className="flex items-center gap-2 text-emerald-900">
-                <TrendingUp className="w-5 h-5" /> 
-                Manual Category Allocation
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Select Category</label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  disabled={loadingCategories}
-                >
-                  <option value="">-- Choose a Category --</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name} ({parseFloat(cat.allocation_percentage || 0).toFixed(0)}%)
-                    </option>
-                  ))}
-                </select>
-                {loadingCategories && (
-                  <p className="text-xs text-slate-500">Loading categories...</p>
-                )}
-                {!loadingCategories && categories.length === 0 && (
-                  <p className="text-xs text-amber-600">No categories found. Please create categories first.</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Select Sub-category</label>
-                <select
-                  value={selectedSubcategory}
-                  onChange={(e) => setSelectedSubcategory(e.target.value)}
-                  disabled={!selectedCategory || filteredSubcategories.length === 0}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">-- Choose a Sub-category --</option>
-                  {filteredSubcategories.map((sub) => (
-                    <option key={sub.id} value={sub.id}>
-                      {sub.name} ({formatCompactCurrency(parseFloat(sub.allocation_amount || 0))})
-                    </option>
-                  ))}
-                </select>
-                {selectedCategory && filteredSubcategories.length === 0 && (
-                  <p className="text-xs text-amber-600">This category has no sub-categories yet. Please add sub-categories in Category Manager.</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Allocation Amount</label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input 
-                    type="number" 
-                    placeholder="Enter allocation amount" 
-                    value={manualAmount}
-                    onChange={(e) => setManualAmount(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                {suggestedAmount && parseFloat(suggestedAmount) > 0 && (
-                  <div className="flex items-center justify-between text-xs p-2 bg-emerald-50 rounded border border-emerald-200">
-                    <span className="text-slate-600">💡 Configured allocation amount:</span>
-                    <button
-                      onClick={() => setManualAmount(suggestedAmount)}
-                      className="text-emerald-600 hover:text-emerald-700 font-semibold hover:underline"
-                    >
-                      {formatCurrency(parseFloat(suggestedAmount))}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <Button 
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={handleManualAllocate}
-                disabled={!selectedCategory || !selectedSubcategory || !manualAmount}
-              >
-                Preview Allocation
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Error Message */}
-          {error && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-red-900">Error</p>
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Success Result */}
-          {result && result.success && (
-            <Card className="border-green-200 bg-green-50 shadow-lg">
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-3 mb-4">
-                  <CheckCircle className="w-6 h-6 text-green-600 mt-0.5" />
-                  <div>
-                    <p className="font-bold text-green-900 text-lg">{result.message}</p>
-                    {!result.manual && (
-                      <div className="text-sm text-green-700 mt-2 space-y-1">
-                        <p>Department: <strong>{result.department}</strong></p>
-                        <p>Total Fund: <strong>{result.total_fund}</strong></p>
-                        <p>Allocated: <strong>{result.total_allocated}</strong></p>
+                {error && <FeedbackBox type="error" message={error} />}
+                {result && (
+                  <div style={{ animation: "fadeIn 0.25s ease" }}>
+                    <FeedbackBox type="success" message={result.message} />
+                    {result.type === "auto" && result.breakdowns && <ResultGrid breakdowns={result.breakdowns} />}
+                    {result.type === "manual" && result.item && (
+                      <div style={{
+                        marginTop: 14, padding: "15px 18px",
+                        background: "#fffbeb", border: "1px solid rgba(245,168,43,0.2)",
+                        borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                      }}>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: "#d97706", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 3px" }}>{result.item.category}</p>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 3px" }}>{result.item.subcategory}</p>
+                          <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, fontStyle: "italic" }}>{result.item.desc}</p>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 3px" }}>Confirmed</p>
+                          <p style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>{result.item.amount}</p>
+                        </div>
                       </div>
                     )}
                   </div>
-                </div>
-
-                {!result.manual && result.category_breakdown && (
-                  <div className="space-y-3 mt-4">
-                    <p className="font-semibold text-slate-700 text-sm">Category Breakdown:</p>
-                    {result.category_breakdown.map((alloc, idx) => (
-                      <div key={idx} className="bg-white p-4 rounded-lg border border-green-200">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="font-bold text-slate-900">{alloc.category}</p>
-                            <p className="text-xs text-slate-500 mt-1">{alloc.percentage}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-green-700 text-lg">{alloc.amount}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 )}
-
-                {result.manual && result.allocations && (
-                  <div className="space-y-3 mt-4">
-                    <p className="font-semibold text-slate-700 text-sm">Allocation Preview:</p>
-                    {result.allocations.map((alloc, idx) => (
-                      <div key={idx} className="bg-white p-4 rounded-lg border border-green-200">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="font-bold text-slate-900">{alloc.department}</p>
-                            {alloc.subcategory && (
-                              <p className="text-xs text-indigo-600 font-medium mt-1">→ {alloc.subcategory}</p>
-                            )}
-                            <p className="text-xs text-slate-500 mt-1">{alloc.description}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-green-700 text-lg">{alloc.amount}</p>
-                            <p className="text-xs text-slate-600">{alloc.percentage}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Right Column - History & Stats */}
-        <div className="space-y-6">
-          <Card className="shadow-lg">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <History className="w-5 h-5" /> 
-                  Allocation History (FY 2026)
-                </CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={fetchHistory}
-                  disabled={loadingHistory}
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingHistory ? 'animate-spin' : ''}`} />
-                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
+            </div>
+
+            {/* FOOTER INFO */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              {[
+                { label: "Department", value: userDeptName },
+                { label: "Mode", value: mode === "auto" ? "Auto distribution" : "Manual override" },
+                { label: "Fiscal year", value: `FY ${yearFilter}` },
+              ].map((item, i) => (
+                <div key={i} style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 12, padding: "13px 16px" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 3px" }}>{item.label}</p>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* RIGHT: LEDGER */}
+          <div style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 16, overflow: "hidden", position: "sticky", top: 24 }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 1px" }}>Allocation log</p>
+                <p style={{ fontSize: 10, fontWeight: 600, color: "#94a3b8", margin: 0, textTransform: "uppercase", letterSpacing: "0.08em" }}>FY {yearFilter}</p>
+              </div>
+              <button onClick={() => fetchHistory(yearFilter)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 4, borderRadius: 6, display: "flex" }}>
+                <RefreshCw size={14} style={{ animation: loadingHistory ? "spin 1s linear infinite" : "none" }} />
+              </button>
+            </div>
+
+            <div style={{ padding: "10px", maxHeight: 460, overflowY: "auto" }}>
               {loadingHistory ? (
-                <div className="text-center py-8 text-slate-500">
-                  <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
-                  <p className="text-sm">Loading history...</p>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "50px 0", gap: 10 }}>
+                  <div style={{ width: 22, height: 22, border: "2px solid #f1f5f9", borderTopColor: "#f5a82b", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Loading…</p>
                 </div>
               ) : history.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  <History className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No allocation history found</p>
-                  <p className="text-xs mt-1">Run an allocation to see it here</p>
+                <div style={{ padding: "50px 0", textAlign: "center" }}>
+                  <p style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>No records yet</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {history.map((item, idx) => (
-                    <div 
-                      key={idx} 
-                      className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold text-slate-900">{item.department}</p>
-                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
-                              {item.allocation_percentage.toFixed(0)}%
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">Category Budget</p>
-                        </div>
-                        <div className="text-right ml-4">
-                          <p className="font-bold text-indigo-700 text-lg">{item.allocated}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* Total Summary */}
-                  <div className="mt-4 pt-4 border-t border-slate-300">
-                    <div className="flex justify-between items-center">
-                      <p className="font-bold text-slate-700">Total Allocated:</p>
-                      <p className="font-bold text-indigo-700 text-xl">
-                        {history.length > 0 ? 
-                          formatCurrency(
-                            history.reduce((sum, item) => 
-                              sum + (parseFloat(item.raw_allocated) || 0), 0
-                            )
-                          ) : formatCurrency(0)
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                history.map((item, idx) => (
+                  <LedgerRow key={idx} item={item} index={idx} total={history.length} />
+                ))
               )}
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Quick Stats */}
-          <Card className="shadow-lg bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-200">
-            <CardHeader>
-              <CardTitle className="text-indigo-900">Quick Stats</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Department:</span>
-                <span className="font-bold text-indigo-700">{userDeptName}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Categories Funded:</span>
-                <span className="font-bold text-indigo-700">{history.length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Active Categories:</span>
-                <span className="font-bold text-indigo-700">{categories.length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Total Budget Allocated:</span>
-                <span className="font-bold text-indigo-700">
-                  {formatCurrency(history.reduce((sum, item) => sum + (parseFloat(item.raw_allocated) || 0), 0))}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Fiscal Year:</span>
-                <span className="font-bold text-indigo-700">2026</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Allocation Method:</span>
-                <span className="font-bold text-indigo-700">Automated</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Category Summary */}
-          {categories.length > 0 && (
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="text-slate-900">Category Overview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {categories.map((cat) => (
-                    <div key={cat.id} className="flex justify-between items-center p-2 hover:bg-slate-50 rounded">
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">{cat.name}</p>
-                        <p className="text-xs text-slate-500">{cat.subcategory_count} sub-categories</p>
-                      </div>
-                      <span className="text-xs font-semibold text-indigo-600">
-                        {parseFloat(cat.allocation_percentage || 0).toFixed(0)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            <div style={{ margin: "0 10px 10px", padding: "14px 16px", background: "#0f172a", borderRadius: 12 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, color: "#f5a82b", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 5px" }}>Total deployed</p>
+              <p style={{ fontSize: 20, fontWeight: 800, color: "#fefce8", margin: 0, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "-0.02em" }}>
+                {fmt(totalAllocated)}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    </DeptLayout>
+    </UnifiedLayout>
   );
-};
-
-export default BudgetAllocation;
+}

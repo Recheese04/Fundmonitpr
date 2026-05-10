@@ -1,31 +1,32 @@
 import React, { useState, useEffect } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import UnifiedLayout from "@/components/layout/UnifiedLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { 
-  UserPlus, 
-  Trash2, 
-  Edit, 
-  Loader2, 
-  Search, 
-  Building2, 
-  Mail, 
-  Shield, 
+import {
+  UserPlus,
+  Trash2,
+  Edit,
+  Loader2,
+  Search,
+  Building2,
+  Mail,
+  Shield,
   Users,
   X,
   RefreshCw,
   Filter,
   AlertTriangle
 } from "lucide-react";
+import API_URL from "@/apiConfig";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -34,32 +35,32 @@ export default function UserManagement() {
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(""); 
+  const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [deptFilter, setDeptFilter] = useState("all");
-  
+
   const [formData, setFormData] = useState({
-    id: "", 
-    full_name: "", 
-    email: "", 
-    password: "", 
-    role: "staff", 
-    department_id: "" 
+    id: "",
+    full_name: "",
+    email: "",
+    password: "",
+    role: "staff",
+    department_id: ""
   });
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const [uRes, dRes] = await Promise.all([
-        fetch("http://localhost/fundmonitor-api/admin_actions.php?action=get_users"),
-        fetch("http://localhost/fundmonitor-api/admin_actions.php?action=get_departments")
+        fetch(`${API_URL}/admin_actions.php?action=get_users`),
+        fetch(`${API_URL}/admin_actions.php?action=get_departments`)
       ]);
       setUsers(await uRes.json());
       setDepartments(await dRes.json());
-    } catch (err) { 
-      console.error(err); 
-    } finally { 
-      setLoading(false); 
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -81,26 +82,26 @@ export default function UserManagement() {
   const handleSave = async (e, isUpdate = false) => {
     e.preventDefault();
     setSaving(true);
-    
+
     try {
       const action = isUpdate ? 'update_user' : 'create_user';
-      const res = await fetch(`http://localhost/fundmonitor-api/admin_actions.php?action=${action}`, {
+      const res = await fetch(`${API_URL}/admin_actions.php?action=${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData)
       });
       const data = await res.json();
-      
+
       if (data.success) {
         setOpen(false);
         setEditOpen(false);
-        setFormData({ 
-          id: "", 
-          full_name: "", 
-          email: "", 
-          password: "", 
-          role: "staff", 
-          department_id: "" 
+        setFormData({
+          id: "",
+          full_name: "",
+          email: "",
+          password: "",
+          role: "staff",
+          department_id: ""
         });
         fetchData();
         alert(data.message);
@@ -116,10 +117,10 @@ export default function UserManagement() {
 
   const handleDelete = async (id, userName) => {
     if (!window.confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) return;
-    
+
     try {
-      await fetch(`http://localhost/fundmonitor-api/admin_actions.php?action=delete_user&id=${id}`, { 
-        method: "DELETE" 
+      await fetch(`${API_URL}/admin_actions.php?action=delete_user&id=${id}`, {
+        method: "DELETE"
       });
       fetchData();
       alert("User deleted successfully");
@@ -131,20 +132,20 @@ export default function UserManagement() {
   const closeModal = () => {
     setOpen(false);
     setEditOpen(false);
-    setFormData({ 
-      id: "", 
-      full_name: "", 
-      email: "", 
-      password: "", 
-      role: "staff", 
-      department_id: "" 
+    setFormData({
+      id: "",
+      full_name: "",
+      email: "",
+      password: "",
+      role: "staff",
+      department_id: ""
     });
   };
 
   // Filter users
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         u.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      u.email?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = roleFilter === "all" || u.role === roleFilter;
     const matchesDept = deptFilter === "all" || u.department_id?.toString() === deptFilter;
     return matchesSearch && matchesRole && matchesDept;
@@ -157,13 +158,13 @@ export default function UserManagement() {
       department_head: "bg-blue-100 text-blue-700 border-blue-300",
       staff: "bg-slate-100 text-slate-700 border-slate-300"
     };
-    
+
     const labels = {
       admin: "Admin",
       department_head: "Dept Head",
       staff: "Staff"
     };
-    
+
     return (
       <Badge className={`${styles[role] || styles.staff} border font-medium text-xs`}>
         {labels[role] || role}
@@ -180,389 +181,239 @@ export default function UserManagement() {
   };
 
   return (
-    <DashboardLayout>
-      <div className="max-w-7xl mx-auto space-y-6 p-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <UnifiedLayout title="User Management" subtitle="Manage system users, roles, and departments">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap');
+        .um-root * { font-family: 'Outfit', sans-serif; box-sizing: border-box; }
+        .um-card { background: #fff; border: 1px solid #f1f5f9; border-radius: 14px; padding: 18px 20px; transition: transform 0.2s, box-shadow 0.2s; }
+        .um-card:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.06); }
+        .btn-primary { 
+          display: inline-flex; align-items: center; gap: 8px; 
+          padding: 8px 16px; background: #0f172a; color: #fde68a; 
+          border: 1px solid rgba(245,168,43,0.3); border-radius: 9px;
+          font-size: 13px; font-weight: 700; cursor: pointer;
+          transition: background 0.15s, box-shadow 0.15s;
+          font-family: inherit;
+        }
+        .btn-primary:hover { background: #1e293b; box-shadow: 0 4px 14px rgba(245,168,43,0.15); }
+        .btn-outline {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 7px 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+          font-size: 12px; font-weight: 700; color: #64748b; cursor: pointer;
+          font-family: inherit; transition: all 0.15s;
+        }
+        .btn-outline:hover { background: #f8fafc; border-color: #cbd5e1; color: #475569; }
+        .um-input {
+          width: 100%; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px;
+          font-size: 13px; font-weight: 500; color: #1e293b; background: #fff;
+          outline: none; transition: border-color 0.15s;
+        }
+        .um-input:focus { border-color: #f5a82b; }
+        .um-label { display: block; font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; }
+        .role-admin { background: #fff1f2; color: #e11d48; border: 1px solid rgba(225,29,72,0.2); }
+        .role-dept { background: #eff6ff; color: #1d4ed8; border: 1px solid rgba(29,78,216,0.2); }
+        .role-staff { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
+        .badge-compact { padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; }
+        tr:hover td { background: #fafafa; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .um-root > * { animation: fadeUp 0.35s ease both; }
+      `}</style>
+
+      <div className="um-root" style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 48 }}>
+        
+        {/* HEADER SECTION */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">User Management</h1>
-            <p className="text-sm text-slate-600 mt-1">Manage system users, roles, and departments</p>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.02em" }}>User Directory</h2>
+            <p style={{ fontSize: 12, color: "#94a3b8", margin: "3px 0 0" }}>Manage system access and departmental roles</p>
           </div>
-          <div className="flex gap-3">
-            <Button 
-              onClick={fetchData} 
-              variant="outline"
-              disabled={loading}
-              className="gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={fetchData} disabled={loading} className="btn-outline">
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
               Refresh
-            </Button>
-            <Button 
-              onClick={() => {
-                setFormData({
-                  id:"", 
-                  full_name:"", 
-                  email:"", 
-                  password:"", 
-                  role:"staff", 
-                  department_id:""
-                }); 
-                setOpen(true);
-              }} 
-              className="bg-indigo-600 hover:bg-indigo-700 gap-2"
-            >
-              <UserPlus className="w-4 h-4" />
+            </button>
+            <button onClick={() => {
+              setFormData({ id: "", full_name: "", email: "", password: "", role: "staff", department_id: "" });
+              setOpen(true);
+            }} className="btn-primary">
+              <UserPlus size={15} />
               New User
-            </Button>
+            </button>
           </div>
         </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="border-l-4 border-l-indigo-500">
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Total Users</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
+        {/* STATS GRID */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+          {[
+            { label: "Total Users", val: stats.total, icon: Users, color: "#6366f1" },
+            { label: "Admins", val: stats.admin, icon: Shield, color: "#f43f5e" },
+            { label: "Dept Heads", val: stats.deptHead, icon: Building2, color: "#3b82f6" },
+            { label: "Staff members", val: stats.staff, icon: Users, color: "#64748b" }
+          ].map((s, i) => (
+            <div key={i} className="um-card" style={{ padding: "16px 18px", animationDelay: `${i * 50}ms` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", margin: 0 }}>{s.label}</p>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>
+                  <s.icon size={15} />
                 </div>
-                <Users className="w-8 h-8 text-indigo-500 opacity-50" />
               </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="border-l-4 border-l-purple-500">
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Admins</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.admin}</p>
-                </div>
-                <Shield className="w-8 h-8 text-purple-500 opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="border-l-4 border-l-blue-500">
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Dept Heads</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.deptHead}</p>
-                </div>
-                <Building2 className="w-8 h-8 text-blue-500 opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="border-l-4 border-l-slate-500">
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Staff</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.staff}</p>
-                </div>
-                <Users className="w-8 h-8 text-slate-500 opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
+              <p style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>{s.val}</p>
+            </div>
+          ))}
         </div>
 
-        {/* Search and Filters */}
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Role Filter */}
-              <div className="w-full md:w-48">
-                <select
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                >
-                  <option value="all">All Roles</option>
-                  <option value="admin">Admin</option>
-                  <option value="department_head">Dept Head</option>
-                  <option value="staff">Staff</option>
-                </select>
-              </div>
-
-              {/* Department Filter */}
-              <div className="w-full md:w-48">
-                <select
-                  value={deptFilter}
-                  onChange={(e) => setDeptFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                >
-                  <option value="all">All Departments</option>
-                  {departments.map(d => (
-                    <option key={d.id} value={d.id}>{d.department_name}</option>
-                  ))}
-                </select>
-              </div>
+        {/* FILTERS CARD */}
+        <div className="um-card" style={{ padding: "12px 16px" }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ flex: 1, position: "relative", minWidth: 200 }}>
+              <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+              <input 
+                className="um-input focus-gold" 
+                style={{ paddingLeft: 36 }}
+                placeholder="Search name or email..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94a3b8", cursor: "pointer" }}>
+                  <X size={14} />
+                </button>
+              )}
             </div>
-            
-            {/* Active Filters Display */}
-            {(searchQuery || roleFilter !== "all" || deptFilter !== "all") && (
-              <div className="mt-3 flex items-center gap-2 text-xs text-slate-600">
-                <Filter className="w-3 h-3" />
-                <span>Active filters:</span>
-                {searchQuery && <Badge variant="outline" className="text-xs">Search: "{searchQuery}"</Badge>}
-                {roleFilter !== "all" && <Badge variant="outline" className="text-xs">Role: {roleFilter}</Badge>}
-                {deptFilter !== "all" && (
-                  <Badge variant="outline" className="text-xs">
-                    Dept: {departments.find(d => d.id.toString() === deptFilter)?.department_name}
-                  </Badge>
-                )}
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setRoleFilter("all");
-                    setDeptFilter("all");
-                  }}
-                  className="text-indigo-600 hover:text-indigo-700 underline ml-2"
-                >
-                  Clear all
-                </button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <div style={{ width: 150 }}>
+              <select className="um-input focus-gold" value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={{ padding: "8px 10px" }}>
+                <option value="all">All Roles</option>
+                <option value="admin">Admin</option>
+                <option value="department_head">Dept Head</option>
+                <option value="staff">Staff</option>
+              </select>
+            </div>
+            <div style={{ width: 180 }}>
+              <select className="um-input focus-gold" value={deptFilter} onChange={e => setDeptFilter(e.target.value)} style={{ padding: "8px 10px" }}>
+                <option value="all">All Departments</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.department_name}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
 
-        {/* User Modal (Create/Edit) */}
-        <Dialog open={open || editOpen} onOpenChange={(val) => { 
-          if (!val) closeModal();
-        }}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <div className="flex items-center justify-between">
-                <DialogTitle className="text-xl font-bold">
-                  {editOpen ? "Edit User" : "Create New User"}
-                </DialogTitle>
-                <button
-                  onClick={closeModal}
-                  className="p-1 hover:bg-slate-100 rounded transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </DialogHeader>
-            
-            <form onSubmit={(e) => handleSave(e, editOpen)} className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">Full Name *</Label>
-                <Input 
-                  placeholder="John Doe" 
-                  value={formData.full_name} 
-                  onChange={e => setFormData({...formData, full_name: e.target.value})} 
-                  required 
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">Email Address *</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input 
-                    type="email" 
-                    placeholder="john.doe@example.com" 
-                    value={formData.email} 
-                    onChange={e => setFormData({...formData, email: e.target.value})} 
-                    className="pl-10"
-                    required 
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
-                  {editOpen ? "New Password (leave blank to keep current)" : "Password *"}
-                </Label>
-                <Input 
-                  type="password" 
-                  placeholder={editOpen ? "Leave blank to keep current password" : "Enter password"} 
-                  value={formData.password} 
-                  onChange={e => setFormData({...formData, password: e.target.value})} 
-                  required={!editOpen} 
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-slate-700">Role *</Label>
-                  <select 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" 
-                    value={formData.role} 
-                    onChange={e => setFormData({...formData, role: e.target.value})}
-                  >
-                    <option value="staff">Staff</option>
-                    <option value="department_head">Dept Head</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-slate-700">Department</Label>
-                  <select 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" 
-                    value={formData.department_id} 
-                    onChange={e => setFormData({...formData, department_id: e.target.value})}
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={d.id}>{d.department_name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button 
-                  type="submit" 
-                  disabled={saving}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>Save {editOpen ? "Changes" : "User"}</>
-                  )}
-                </Button>
-                <Button 
-                  type="button"
-                  onClick={closeModal}
-                  variant="outline"
-                  className="flex-1"
-                  disabled={saving}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* Users Table */}
-        <Card className="shadow-lg">
-          <CardHeader className="border-b bg-slate-50">
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-600" />
-                <span className="text-lg">
-                  User Directory 
-                  <span className="text-sm font-normal text-slate-600 ml-2">
-                    ({filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'})
-                  </span>
-                </span>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="text-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-indigo-600" />
-                <p className="text-sm text-slate-600">Loading users...</p>
-              </div>
-            ) : filteredUsers.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                <p className="text-sm text-slate-600">No users found</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {searchQuery || roleFilter !== "all" || deptFilter !== "all" 
-                    ? "Try adjusting your filters" 
-                    : "Create your first user to get started"}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-semibold">User Information</TableHead>
-                      <TableHead className="font-semibold">Role</TableHead>
-                      <TableHead className="font-semibold">Department</TableHead>
-                      <TableHead className="text-right font-semibold">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUsers.map((user) => (
-                      <TableRow key={user.id} className="hover:bg-slate-50 transition-colors">
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                              <span className="text-indigo-700 font-semibold text-sm">
-                                {user.full_name?.charAt(0).toUpperCase()}
-                              </span>
+        {/* TABLE SECTION */}
+        <div style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 16, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid #f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", margin: 0 }}>
+              Directory Listing <span style={{ color: "#94a3b8", fontWeight: 500, marginLeft: 6 }}>({filteredUsers.length})</span>
+            </p>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#fafafa" }}>
+                  {["User Details", "System Role", "Department", ""].map((h, i) => (
+                    <th key={i} style={{ padding: "10px 20px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={4} style={{ padding: 60, textAlign: "center" }}>
+                    <Loader2 size={24} className="animate-spin" style={{ margin: "0 auto 10px", color: "#f5a82b" }} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8" }}>Fetching user data...</p>
+                  </td></tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr><td colSpan={4} style={{ padding: 60, textAlign: "center" }}>
+                    <Users size={32} style={{ margin: "0 auto 10px", color: "#e2e8f0" }} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8" }}>No matches found</p>
+                  </td></tr>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const roleClass = u.role === "admin" ? "role-admin" : u.role === "department_head" ? "role-dept" : "role-staff";
+                    const roleLabel = u.role === "admin" ? "Admin" : u.role === "department_head" ? "Dept Head" : "Staff";
+                    return (
+                      <tr key={u.id} style={{ borderBottom: "1px solid #f8fafc", transition: "background 0.1s" }}>
+                        <td style={{ padding: "12px 20px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 10, background: "#f8fafc", border: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#64748b" }}>
+                              {u.full_name?.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-900">{user.full_name}</div>
-                              <div className="text-xs text-slate-500 flex items-center gap-1">
-                                <Mail className="w-3 h-3" />
-                                {user.email}
-                              </div>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", margin: 0 }}>{u.full_name}</p>
+                              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>{u.email}</p>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {getRoleBadge(user.role)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-sm">
-                            <Building2 className="w-4 h-4 text-slate-400" />
-                            <span className="text-slate-700">{user.dept_name || "Not assigned"}</span>
+                        </td>
+                        <td style={{ padding: "12px 20px" }}>
+                          <span className={`${roleClass} badge-compact`}>{roleLabel}</span>
+                        </td>
+                        <td style={{ padding: "12px 20px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <Building2 size={13} color="#94a3b8" />
+                            <span style={{ fontSize: 12, color: "#475569", fontWeight: 500 }}>{u.dept_name || "—"}</span>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => startEdit(user)}
-                              className="hover:bg-blue-50 hover:text-blue-700"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              className="hover:bg-red-50 hover:text-red-700" 
-                              onClick={() => handleDelete(user.id, user.full_name)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                        </td>
+                        <td style={{ padding: "12px 20px", textAlign: "right" }}>
+                          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                            <button onClick={() => startEdit(u)} style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #f1f5f9", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }} title="Edit"><Edit size={13} /></button>
+                            <button onClick={() => handleDelete(u.id, u.full_name)} style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #fff1f2", background: "#fff1f240", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#e11d48" }} title="Delete"><Trash2 size={13} /></button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* MODAL (Create/Edit) */}
+        {(open || editOpen) && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 440, boxShadow: "0 24px 64px rgba(0,0,0,0.15)", overflow: "hidden", animation: "fadeUp 0.25s ease" }}>
+              <div style={{ padding: "16px 22px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <p style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: 0 }}>{editOpen ? "Modify Credentials" : "Provision New User"}</p>
+                <button onClick={closeModal} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 4 }}><X size={18} /></button>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <form onSubmit={(e) => handleSave(e, editOpen)} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <label className="um-label">Full Name *</label>
+                  <input className="um-input focus-gold" value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="um-label">Email Address *</label>
+                  <input type="email" className="um-input focus-gold" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="um-label">{editOpen ? "New Secret (Optional)" : "Secret Key *"}</label>
+                  <input type="password" className="um-input focus-gold" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required={!editOpen} placeholder={editOpen ? "Leave blank to keep current" : ""} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label className="um-label">Privilege Level *</label>
+                    <select className="um-input focus-gold" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
+                      <option value="staff">Staff</option>
+                      <option value="department_head">Dept Head</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="um-label">Department Node</label>
+                    <select className="um-input focus-gold" value={formData.department_id} onChange={e => setFormData({ ...formData, department_id: e.target.value })}>
+                      <option value="">No Node</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.department_name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 10, paddingTop: 6 }}>
+                  <button type="submit" disabled={saving} className="btn-primary" style={{ flex: 1, height: 42, justifyContent: "center" }}>
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : editOpen ? "Commit Changes" : "Initialize User"}
+                  </button>
+                  <button type="button" onClick={closeModal} disabled={saving} style={{ flex: 1, padding: "10px 0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontWeight: 700, color: "#64748b", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
-    </DashboardLayout>
+    </UnifiedLayout>
   );
-}
+}

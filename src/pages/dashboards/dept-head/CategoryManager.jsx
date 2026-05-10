@@ -1,22 +1,79 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { 
-  FolderTree, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  X, 
-  Save,
-  AlertTriangle,
-  RefreshCw,
-  ChevronDown,
-  ChevronRight
+import React, { useState, useEffect } from "react";
+import UnifiedLayout from "@/components/layout/UnifiedLayout";
+import {
+  FolderTree, Plus, Edit, Trash2, X, Save,
+  AlertTriangle, RefreshCw, ChevronDown, ChevronRight
 } from "lucide-react";
-import DeptLayout from "../../../components/layout/DeptLayout";
+import API_URL from "@/apiConfig";
 
-const API_BASE = "http://localhost/fundmonitor-api/categories.php";
+const API_BASE = `${API_URL}/categories.php`;
+
+const fmt = (v) =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2 }).format(v || 0);
+
+const inputStyle = {
+  width: "100%", padding: "10px 13px",
+  border: "1px solid #e2e8f0", borderRadius: 9,
+  fontSize: 13, fontWeight: 500, color: "#0f172a",
+  background: "#fff", outline: "none",
+  boxSizing: "border-box", fontFamily: "inherit",
+  transition: "border-color 0.15s",
+};
+const labelStyle = {
+  display: "block", fontSize: 11, fontWeight: 700,
+  color: "#64748b", textTransform: "uppercase",
+  letterSpacing: "0.08em", marginBottom: 5,
+};
+
+function Modal({ onClose, children }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 500, boxShadow: "0 24px 64px rgba(0,0,0,0.15)", overflow: "hidden", animation: "modalIn 0.2s ease" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ModalHeader({ title, onClose }) {
+  return (
+    <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <p style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: 0 }}>{title}</p>
+      <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 4, borderRadius: 6, display: "flex" }}><X size={18} /></button>
+    </div>
+  );
+}
+
+function Toast({ type, message }) {
+  const c = type === "error"
+    ? { bg: "#fff1f2", border: "rgba(239,68,68,0.2)", dot: "#e11d48", text: "#9f1239" }
+    : { bg: "#fffbeb", border: "rgba(245,168,43,0.3)", dot: "#f5a82b", text: "#92400e" };
+  return (
+    <div style={{ padding: "12px 16px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, display: "flex", alignItems: "center", gap: 10, animation: "fadeIn 0.2s ease" }}>
+      <div style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
+      <p style={{ fontSize: 13, fontWeight: 600, color: c.text, margin: 0 }}>{message}</p>
+    </div>
+  );
+}
+
+function ProgressBar({ pct, over }) {
+  const color = over ? "#ef4444" : pct >= 80 ? "#f97316" : "#22c55e";
+  return (
+    <div style={{ height: 4, background: "#f1f5f9", borderRadius: 99, overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: color, borderRadius: 99, transition: "width 0.6s ease" }} />
+    </div>
+  );
+}
+
+function IconBtn({ onClick, danger, title, children }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button onClick={onClick} title={title} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", background: hov ? (danger ? "#fff1f2" : "#f8fafc") : "#fff", borderColor: hov ? (danger ? "rgba(239,68,68,0.3)" : "#e2e8f0") : "#f1f5f9", color: hov ? (danger ? "#e11d48" : "#0f172a") : "#94a3b8" }}>
+      {children}
+    </button>
+  );
+}
 
 const CategoryManager = () => {
   const [categories, setCategories] = useState([]);
@@ -24,994 +81,493 @@ const CategoryManager = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  
-  // Modal states
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = useState([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showSubcategoryModal, setShowSubcategoryModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  
-  // Form states
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingSubcategory, setEditingSubcategory] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  
-  // Store the current category for subcategory operations
   const [currentCategory, setCurrentCategory] = useState(null);
-  
-  // Expanded categories
   const [expandedCategories, setExpandedCategories] = useState({});
-  
-  // Category form
-  const [categoryForm, setCategoryForm] = useState({
-    name: '',
-    description: '',
-    total_budget: ''
-  });
-  
-  // Subcategory form
-  const [subcategoryForm, setSubcategoryForm] = useState({
-    category_id: '',
-    department_id: '',
-    name: '',
-    allocation_amount: '',
-    description: ''
-  });
+  const [categoryForm, setCategoryForm] = useState({ name: "", description: "", total_budget: "", allocation_percentage: "" });
+  const [subcategoryForm, setSubcategoryForm] = useState({ category_id: "", department_id: "", name: "", allocation_amount: "", description: "" });
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
+  useEffect(() => { fetchYears(); fetchCategories(); }, [selectedYear]);
+  useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 5000); return () => clearTimeout(t); } }, [success]);
+  useEffect(() => { if (error) { const t = setTimeout(() => setError(null), 5000); return () => clearTimeout(t); } }, [error]);
 
-  // Auto-clear messages after 5 seconds
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => setSuccess(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [success]);
+  const fetchYears = async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin_actions.php?action=get_years`);
+      const data = await res.json();
+      setAvailableYears(Array.isArray(data) ? data : []);
+    } catch (e) { console.error(e); }
+  };
 
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
-
-  const fetchCategories = async () => {
+  const fetchCategories = async (year = selectedYear) => {
     setLoading(true);
     try {
-        const user = JSON.parse(localStorage.getItem('user'));
-        const deptId = user?.department_id || 0;
-        const currentYear = new Date().getFullYear();
-
-        const response = await fetch(
-            `${API_BASE}?action=get_categories_with_budget&year=${currentYear}&department_id=${deptId}`
-        );
-        const data = await response.json();
-        
-        if (data.success) {
-            // Ensure every category has department_id
-            const categoriesWithDept = data.categories.map(cat => ({
-                ...cat,
-                department_id: cat.department_id || deptId
-            }));
-            setCategories(categoriesWithDept);
-            setDepartmentAllocatedBudget(data.department_allocated_budget || 0); // Add this line
-            const expanded = {};
-            categoriesWithDept.forEach(cat => {
-                if (cat.subcategories?.length > 0) expanded[cat.id] = true;
-            });
-            setExpandedCategories(expanded);
-        } else {
-            setError(data.message);
-        }
-    } catch (err) {
-        setError('Failed to fetch categories: ' + err.message);
-    } finally {
-        setLoading(false);
-    }
+      const user = JSON.parse(localStorage.getItem("user"));
+      const deptId = user?.department_id || 0;
+      const res = await fetch(`${API_BASE}?action=get_categories_with_budget&year=${year}&department_id=${deptId}`);
+      const data = await res.json();
+      if (data.success) {
+        const cats = data.categories.map(c => ({ ...c, department_id: c.department_id || deptId }));
+        setCategories(cats);
+        setDepartmentAllocatedBudget(data.department_allocated_budget || 0);
+        const exp = {};
+        cats.forEach(c => { if (c.subcategories?.length > 0) exp[c.id] = true; });
+        setExpandedCategories(exp);
+      } else setError(data.message);
+    } catch (e) { setError("Failed to fetch categories: " + e.message); }
+    finally { setLoading(false); }
   };
 
-  const toggleCategory = (categoryId) => {
-    setExpandedCategories(prev => ({
-      ...prev,
-      [categoryId]: !prev[categoryId]
-    }));
-  };
+  const toggleCategory = (id) => setExpandedCategories(p => ({ ...p, [id]: !p[id] }));
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
-      minimumFractionDigits: 2
-    }).format(amount || 0);
-  };
-
-  const calculateCategoryBudget = (category) => {
-    let totalBudget = parseFloat(category.total_budget || 0);
-    
+  const calcBudget = (cat) => {
+    let totalBudget = parseFloat(cat.total_budget || 0);
     let allocatedAmount = 0;
-    let source = 'none';
-    
-    if (category.allocated_budget !== undefined && category.allocated_budget !== null && !isNaN(parseFloat(category.allocated_budget))) {
-      allocatedAmount = parseFloat(category.allocated_budget);
-      source = 'budgets_table';
-    } 
-    else if (category.subcategories_allocated !== undefined && !isNaN(parseFloat(category.subcategories_allocated))) {
-      allocatedAmount = parseFloat(category.subcategories_allocated);
-      source = 'subcategories_sum';
+    if (cat.subcategories_allocated !== undefined && !isNaN(parseFloat(cat.subcategories_allocated))) {
+      allocatedAmount = parseFloat(cat.subcategories_allocated);
+    } else if (cat.allocated_budget !== undefined && cat.allocated_budget !== null && !isNaN(parseFloat(cat.allocated_budget))) {
+      allocatedAmount = parseFloat(cat.allocated_budget);
     }
-
-    if (totalBudget === 0 && allocatedAmount > 0) {
-      totalBudget = allocatedAmount;
-    }
-
-    const remainingBudget = totalBudget - allocatedAmount;
-    const percentageUsed = totalBudget > 0 ? (allocatedAmount / totalBudget) * 100 : 0;
-
-    return {
-      totalBudget,
-      allocatedAmount,
-      remainingBudget,
-      percentageUsed
-    };
+    if (totalBudget === 0 && allocatedAmount > 0) totalBudget = allocatedAmount;
+    return { totalBudget, allocatedAmount, remainingBudget: totalBudget - allocatedAmount, percentageUsed: totalBudget > 0 ? (allocatedAmount / totalBudget) * 100 : 0 };
   };
 
-  const getBudgetStatusColor = (remaining, total) => {
-    if (remaining < 0) return 'text-red-600';
-    if (remaining === 0) return 'text-slate-500';
-    const percentage = (remaining / total) * 100;
-    if (percentage < 20) return 'text-orange-600';
-    return 'text-emerald-600';
-  };
-
-  const getProgressBarColor = (percentUsed) => {
-    if (percentUsed > 100) return 'bg-red-500';
-    if (percentUsed === 100) return 'bg-slate-500';
-    if (percentUsed >= 80) return 'bg-orange-500';
-    return 'bg-emerald-500';
-  };
-
-  // ============================================
-  // CATEGORY OPERATIONS
-  // ============================================
-
-  const openCategoryModal = (category = null) => {
-    if (category) {
-      setEditingCategory(category);
-      setCategoryForm({
-        name: category.name,
-        description: category.description || '',
-        total_budget: category.total_budget || ''
-      });
-    } else {
-      setEditingCategory(null);
-      setCategoryForm({ name: '', description: '', total_budget: '' });
-    }
+  const openCategoryModal = (cat = null) => {
+    if (cat) { setEditingCategory(cat); setCategoryForm({ name: cat.name, description: cat.description || "", total_budget: cat.total_budget || "", allocation_percentage: cat.allocation_percentage || "" }); }
+    else { setEditingCategory(null); setCategoryForm({ name: "", description: "", total_budget: "", allocation_percentage: "" }); }
     setShowCategoryModal(true);
   };
-
-  const closeCategoryModal = () => {
-    setShowCategoryModal(false);
-    setEditingCategory(null);
-    setCategoryForm({ name: '', description: '', total_budget: '' });
-  };
+  const closeCategoryModal = () => { setShowCategoryModal(false); setEditingCategory(null); setCategoryForm({ name: "", description: "", total_budget: "", allocation_percentage: "" }); };
 
   const handleSaveCategory = async () => {
-    if (!categoryForm.name.trim()) {
-      setError('Category name is required');
-      return;
-    }
-
-    const userData = localStorage.getItem('user');
-    const user = userData ? JSON.parse(userData) : null;
+    if (!categoryForm.name.trim()) { setError("Category name is required"); return; }
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
     const deptId = user?.department_id;
-
-    if (!deptId) {
-      setError('Session expired. Please log in again.');
-      return;
-    }
-
+    if (!deptId) { setError("Session expired. Please log in again."); return; }
     setLoading(true);
     try {
-      const url = editingCategory 
-        ? `${API_BASE}?action=update_category`
-        : `${API_BASE}?action=create_category`;
-      
-      const method = editingCategory ? 'PUT' : 'POST';
-      
-      const payload = editingCategory
-        ? { id: editingCategory.id, ...categoryForm, department_id: deptId }
-        : { ...categoryForm, department_id: deptId };
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setSuccess(data.message);
-        closeCategoryModal();
-        fetchCategories();
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Failed to save category: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+      const url = editingCategory ? `${API_BASE}?action=update_category` : `${API_BASE}?action=create_category`;
+      const payload = editingCategory ? { id: editingCategory.id, ...categoryForm, department_id: deptId, year: selectedYear } : { ...categoryForm, department_id: deptId, year: selectedYear };
+      const res = await fetch(url, { method: editingCategory ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) { setSuccess(data.message); closeCategoryModal(); fetchCategories(); } else setError(data.message);
+    } catch (e) { setError("Failed to save category: " + e.message); }
+    finally { setLoading(false); }
   };
 
-  const handleDeleteCategory = async (category) => {
-    setDeleteTarget({ type: 'category', data: category });
-    setShowDeleteModal(true);
-  };
+  const handleDeleteCategory = (cat) => { setDeleteTarget({ type: "category", data: cat }); setShowDeleteModal(true); };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-
     setLoading(true);
     try {
       const { type, data } = deleteTarget;
-      const action = type === 'category' ? 'delete_category' : 'delete_subcategory';
-      
-      const response = await fetch(`${API_BASE}?action=${action}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: data.id })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setSuccess(result.message);
-        setShowDeleteModal(false);
-        setDeleteTarget(null);
-        fetchCategories();
-      } else {
-        setError(result.message);
-      }
-    } catch (err) {
-      setError('Failed to delete: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+      const res = await fetch(`${API_BASE}?action=${type === "category" ? "delete_category" : "delete_subcategory"}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: data.id }) });
+      const result = await res.json();
+      if (result.success) { setSuccess(result.message); setShowDeleteModal(false); setDeleteTarget(null); fetchCategories(); } else setError(result.message);
+    } catch (e) { setError("Failed to delete: " + e.message); }
+    finally { setLoading(false); }
   };
 
-  // ============================================
-  // SUBCATEGORY OPERATIONS
-  // ============================================
-
-  const openSubcategoryModal = (category, subcategory = null) => {
-    console.log('=== Opening Subcategory Modal ===');
-    console.log('Category object:', category);
-    
-    // Store the current category
-    setCurrentCategory(category);
-    
-    // Get department_id - try multiple sources
-    const userData = localStorage.getItem('user');
-    const user = userData ? JSON.parse(userData) : null;
-    const deptId = category.department_id || user?.department_id || 0;
-    
-    console.log('Department ID resolution:', {
-      from_category: category.department_id,
-      from_user: user?.department_id,
-      final_deptId: deptId
-    });
-    
-    if (!category.id) {
-      setError('Category ID is missing. Please refresh the page and try again.');
-      return;
-    }
-    
-    if (!deptId || deptId === 0) {
-      setError('Department ID could not be determined. Please log out and log back in.');
-      return;
-    }
-    
-    if (subcategory) {
-      // Editing existing subcategory
-      console.log('Editing subcategory:', subcategory);
-      setEditingSubcategory(subcategory);
-      setSubcategoryForm({
-        category_id: String(category.id),
-        department_id: String(deptId),
-        name: subcategory.name,
-        allocation_amount: subcategory.allocation_amount || 0,
-        description: subcategory.description || ''
-      });
-    } else {
-      // Creating new subcategory
-      console.log('Creating new subcategory');
-      setEditingSubcategory(null);
-      setSubcategoryForm({
-        category_id: String(category.id),
-        department_id: String(deptId),
-        name: '',
-        allocation_amount: '',
-        description: ''
-      });
-    }
-    
-    console.log('Form initialized:', {
-      category_id: String(category.id),
-      department_id: String(deptId)
-    });
-    
+  const openSubcategoryModal = (cat, sub = null) => {
+    setCurrentCategory(cat);
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const deptId = cat.department_id || user?.department_id || 0;
+    if (!cat.id) { setError("Category ID is missing. Please refresh."); return; }
+    if (!deptId) { setError("Department ID missing. Please log in again."); return; }
+    if (sub) { setEditingSubcategory(sub); setSubcategoryForm({ category_id: String(cat.id), department_id: String(deptId), name: sub.name, allocation_amount: sub.allocation_amount || 0, description: sub.description || "" }); }
+    else { setEditingSubcategory(null); setSubcategoryForm({ category_id: String(cat.id), department_id: String(deptId), name: "", allocation_amount: "", description: "" }); }
     setShowSubcategoryModal(true);
   };
-
-  const closeSubcategoryModal = () => {
-    setShowSubcategoryModal(false);
-    setEditingSubcategory(null);
-    setCurrentCategory(null);
-    setSubcategoryForm({
-      category_id: '',
-      department_id: '',
-      name: '',
-      allocation_amount: '',
-      description: ''
-    });
-  };
+  const closeSubcategoryModal = () => { setShowSubcategoryModal(false); setEditingSubcategory(null); setCurrentCategory(null); setSubcategoryForm({ category_id: "", department_id: "", name: "", allocation_amount: "", description: "" }); };
 
   const handleSaveSubcategory = async () => {
-    console.log('=== Save Subcategory Called ===');
-    console.log('Form state:', subcategoryForm);
-    
-    if (!subcategoryForm.name.trim()) {
-      setError('Sub-category name is required');
-      return;
-    }
-
-    // Parse the IDs
+    if (!subcategoryForm.name.trim()) { setError("Sub-category name is required"); return; }
     const catId = parseInt(subcategoryForm.category_id);
     const deptId = parseInt(subcategoryForm.department_id);
-
-    console.log('Parsed IDs:', {
-      original_catId: subcategoryForm.category_id,
-      parsed_catId: catId,
-      catId_isNaN: isNaN(catId),
-      original_deptId: subcategoryForm.department_id,
-      parsed_deptId: deptId,
-      deptId_isNaN: isNaN(deptId)
-    });
-
-    // Validate category ID
-    if (!catId || catId === 0 || isNaN(catId)) {
-      console.error('Category ID validation failed!', {
-        catId,
-        type: typeof catId,
-        form_value: subcategoryForm.category_id,
-        form_type: typeof subcategoryForm.category_id
-      });
-      setError(`Invalid Category ID: ${catId}. Form value: "${subcategoryForm.category_id}". Please close the modal and try again.`);
-      return;
+    if (!catId || isNaN(catId)) { setError("Invalid Category ID. Please close and try again."); return; }
+    if (!deptId || isNaN(deptId)) { setError("Invalid Department ID. Please log in again."); return; }
+    const parentCategory = categories.find(c => c.id === catId);
+    if (parentCategory) {
+      const parentTotal = parseFloat(parentCategory.total_budget || 0);
+      const otherSubTotal = (parentCategory.subcategories || []).filter(s => editingSubcategory ? s.id !== editingSubcategory.id : true).reduce((sum, s) => sum + parseFloat(s.allocation_amount || 0), 0);
+      const newAmount = parseFloat(subcategoryForm.allocation_amount) || 0;
+      if (otherSubTotal + newAmount > parentTotal) { setError(`Budget overlap! Only ${fmt(parentTotal - otherSubTotal)} remains in "${parentCategory.name}".`); return; }
     }
-    
-    // Validate department ID
-    if (!deptId || deptId === 0 || isNaN(deptId)) {
-      console.error('Department ID validation failed!', {
-        deptId,
-        type: typeof deptId,
-        form_value: subcategoryForm.department_id,
-        form_type: typeof subcategoryForm.department_id
-      });
-      setError(`Invalid Department ID: ${deptId}. Form value: "${subcategoryForm.department_id}". Please log out and log back in.`);
-      return;
-    }
-
-    console.log('Validation passed! Proceeding with save...');
-
     setLoading(true);
     try {
-      const url = editingSubcategory 
-        ? `${API_BASE}?action=update_subcategory`
-        : `${API_BASE}?action=create_subcategory`;
-      
-      const method = editingSubcategory ? 'PUT' : 'POST';
-      
-      const payload = {
-        name: subcategoryForm.name.trim(),
-        allocation_amount: parseFloat(subcategoryForm.allocation_amount) || 0,
-        description: subcategoryForm.description.trim(),
-        category_id: catId,
-        department_id: deptId
-      };
-      
-      if (editingSubcategory) {
-        payload.id = editingSubcategory.id;
-      }
-
-      console.log('Sending request:', {
-        url,
-        method,
-        payload
-      });
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await response.json();
-      console.log('Server response:', data);
-      
-      if (data.success) {
-        setSuccess(data.message);
-        closeSubcategoryModal();
-        fetchCategories();
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      console.error('Request failed:', err);
-      setError('Failed to save sub-category: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+      const url = editingSubcategory ? `${API_BASE}?action=update_subcategory` : `${API_BASE}?action=create_subcategory`;
+      const payload = { name: subcategoryForm.name.trim(), allocation_amount: parseFloat(subcategoryForm.allocation_amount) || 0, description: subcategoryForm.description.trim(), category_id: catId, department_id: deptId, year: selectedYear, ...(editingSubcategory ? { id: editingSubcategory.id } : {}) };
+      const res = await fetch(url, { method: editingSubcategory ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) { setSuccess(data.message); closeSubcategoryModal(); fetchCategories(); } else setError(data.message);
+    } catch (e) { setError("Failed to save sub-category: " + e.message); }
+    finally { setLoading(false); }
   };
 
-  const handleDeleteSubcategory = async (subcategory) => {
-    setDeleteTarget({ type: 'subcategory', data: subcategory });
-    setShowDeleteModal(true);
-  };
+  const handleDeleteSubcategory = (sub) => { setDeleteTarget({ type: "subcategory", data: sub }); setShowDeleteModal(true); };
 
-  const handleResetSubcategoryBudget = async (subcategory) => {
-    const confirmed = window.confirm(
-      `Reset budget for "${subcategory.name}"?\n\n` +
-      `This will set the remaining budget back to the allocated amount:\n` +
-      `Allocated: ${formatCurrency(subcategory.allocation_amount)}\n\n` +
-      `Continue?`
-    );
-    
-    if (!confirmed) return;
-
+  const handleResetSubcategoryBudget = async (sub) => {
+    if (!window.confirm(`Reset budget for "${sub.name}"?\n\nAllocated: ${fmt(sub.allocation_amount)}\n\nThis resets remaining budget back to allocated amount.`)) return;
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}?action=reset_subcategory_budget`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: subcategory.id })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setSuccess(data.message || 'Budget reset successfully');
-        fetchCategories();
-      } else {
-        setError(data.message || 'Failed to reset budget');
-      }
-    } catch (err) {
-      setError('Failed to reset budget: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+      const res = await fetch(`${API_BASE}?action=reset_subcategory_budget`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: sub.id }) });
+      const data = await res.json();
+      if (data.success) { setSuccess(data.message || "Budget reset successfully"); fetchCategories(); } else setError(data.message || "Failed to reset budget");
+    } catch (e) { setError("Failed to reset budget: " + e.message); }
+    finally { setLoading(false); }
   };
+
+  const totalRemaining = categories.reduce((s, c) => s + calcBudget(c).remainingBudget, 0);
+  const remainingPct = departmentAllocatedBudget > 0 ? (totalRemaining / departmentAllocatedBudget) * 100 : 0;
+  const totalPct = categories.reduce((s, c) => s + parseFloat(c.allocation_percentage || 0), 0);
 
   return (
-    <DeptLayout title="Category & Sub-category Management">
-      <div className="space-y-6">
-        {/* Header Actions */}
-        <div className="flex justify-between items-center">
+    <UnifiedLayout title="Budget Categories" subtitle={`Fiscal Year ${selectedYear}`}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Outfit:wght@400;500;600;700;800&display=swap');
+        .cm-root * { font-family: 'Outfit', sans-serif; box-sizing: border-box; }
+        input::placeholder, textarea::placeholder { color: #cbd5e1; }
+        .focus-gold:focus { border-color: #f5a82b !important; outline: none; }
+        .row-hover:hover { background: #fafafa; }
+        .sub-row:hover { background: #fff; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)} }
+        @keyframes modalIn { from{opacity:0;transform:scale(0.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)} }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+
+      <div className="cm-root" style={{ display: "flex", flexDirection: "column", gap: 18, paddingBottom: 48 }}>
+
+        {/* HEADER */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Budget Categories</h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Manage budget categories and allocation amounts
-            </p>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.02em" }}>Budget Categories</h2>
+            <p style={{ fontSize: 12, color: "#94a3b8", margin: "3px 0 0" }}>Manage categories and allocation amounts</p>
           </div>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={fetchCategories}
-              disabled={loading}
-              className="gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button
-              onClick={() => openCategoryModal()}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New Category
-            </Button>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ position: "relative" }}>
+              <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                style={{ ...inputStyle, width: "auto", paddingRight: 28, fontSize: 12, fontWeight: 700, color: "#d97706", background: "#fffbeb", border: "1px solid rgba(245,168,43,0.25)", cursor: "pointer" }}>
+                {availableYears.map(y => <option key={y.year} value={y.year}>{y.label}</option>)}
+              </select>
+              <svg style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1L5 5L9 1" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <button onClick={() => fetchCategories()} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 14px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 9, fontSize: 12, fontWeight: 700, color: "#64748b", cursor: "pointer", fontFamily: "inherit" }}>
+              <RefreshCw size={14} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} /> Refresh
+            </button>
+            <button onClick={() => openCategoryModal()} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", background: "#0f172a", border: "1px solid rgba(245,168,43,0.2)", borderRadius: 9, fontSize: 12, fontWeight: 700, color: "#fde68a", cursor: "pointer", fontFamily: "inherit" }}>
+              <Plus size={14} /> New Category
+            </button>
           </div>
         </div>
 
-        {/* Success Message */}
-        {success && (
-          <Card className="border-green-200 bg-green-50">
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2 text-green-800">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-medium">{success}</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {success && <Toast type="success" message={success} />}
+        {error && <Toast type="error" message={error} />}
 
-        {/* Error Message */}
-        {error && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2 text-red-800">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm font-medium">{error}</span>
+        {/* OVERVIEW CARDS */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ background: "#0f172a", border: "1px solid rgba(245,168,43,0.15)", borderRadius: 14, padding: "20px 22px", position: "relative", overflow: "hidden" }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "#f5a82b", textTransform: "uppercase", letterSpacing: "0.12em", margin: "0 0 8px" }}>Total Allocation {selectedYear}</p>
+            <p style={{ fontSize: 26, fontWeight: 800, color: "#fefce8", margin: "0 0 5px", fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "-0.02em" }}>{fmt(departmentAllocatedBudget)}</p>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>Department level budget</span>
+          </div>
+          <div style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 14, padding: "20px 22px" }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.12em", margin: "0 0 8px" }}>Total Remaining Balance</p>
+            <p style={{ fontSize: 26, fontWeight: 800, color: "#22c55e", margin: "0 0 10px", fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "-0.02em" }}>{fmt(totalRemaining)}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, height: 5, background: "#f1f5f9", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.min(remainingPct, 100)}%`, background: "linear-gradient(90deg, #22c55e, #4ade80)", borderRadius: 99, transition: "width 0.8s ease" }} />
               </div>
-            </CardContent>
-          </Card>
-        )}
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", whiteSpace: "nowrap" }}>{remainingPct.toFixed(1)}% left</span>
+            </div>
+          </div>
+        </div>
 
-        {/* Categories List */}
-        <Card className="shadow-lg">
-          <CardHeader className="border-b bg-slate-50">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <FolderTree className="w-5 h-5 text-indigo-600" />
-              Categories & Sub-categories
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading && categories.length === 0 ? (
-              <div className="text-center py-12">
-                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-indigo-600" />
-                <p className="text-sm text-slate-600">Loading categories...</p>
-              </div>
-            ) : categories.length === 0 ? (
-              <div className="text-center py-12">
-                <FolderTree className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                <p className="text-sm text-slate-600">No categories found</p>
-                <p className="text-xs text-slate-500 mt-1">Create your first category to get started</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {categories.map((category) => {
-                  const budget = calculateCategoryBudget(category);
-                  
-                  return (
-                    <div key={category.id}>
-                      {/* Category Row */}
-                      <div className="p-4 hover:bg-slate-50 transition-colors">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-3 flex-1">
-                            <button
-                              onClick={() => toggleCategory(category.id)}
-                              className="mt-1 p-1 hover:bg-slate-200 rounded transition-colors"
-                            >
-                              {expandedCategories[category.id] ? (
-                                <ChevronDown className="w-4 h-4 text-slate-600" />
-                              ) : (
-                                <ChevronRight className="w-4 h-4 text-slate-600" />
-                              )}
-                            </button>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-bold text-slate-900">{category.name}</h3>
-                                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">
-                                  {category.subcategory_count} sub-categories
-                                </span>
-                                {budget.totalBudget > 0 && (
-                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
-                                    {budget.percentageUsed.toFixed(1)}% allocated
-                                  </span>
-                                )}
-                              </div>
-                              {category.description && (
-                                <p className="text-sm text-slate-600 mt-1">{category.description}</p>
-                              )}
-                              
-                              {/* Category Budget Summary */}
-                              <div className="mt-2 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
-                                <div className="grid grid-cols-3 gap-4 text-sm">
-                                  <div>
-                                    <p className="text-xs text-slate-600 mb-1">Category Budget</p>
-                                    <p className="font-bold text-indigo-900">{formatCurrency(budget.totalBudget)}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-slate-600 mb-1">Allocated to Subs</p>
-                                    <p className={`font-bold ${budget.allocatedAmount > budget.totalBudget ? 'text-red-600' : 'text-emerald-600'}`}>
-                                      {formatCurrency(budget.allocatedAmount)}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-slate-600 mb-1">Available</p>
-                                    <p className={`font-bold ${getBudgetStatusColor(budget.remainingBudget, budget.totalBudget)}`}>
-                                      {formatCurrency(budget.remainingBudget)}
-                                    </p>
-                                  </div>
+        {/* CATEGORIES LIST */}
+        <div style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 16, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid #f8fafc", display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 30, height: 30, background: "#fffbeb", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <FolderTree size={15} color="#f5a82b" />
+            </div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: 0 }}>Categories & Sub-categories</p>
+          </div>
+
+          {loading && categories.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "60px 0", gap: 10 }}>
+              <div style={{ width: 24, height: 24, border: "3px solid #f1f5f9", borderTopColor: "#f5a82b", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#94a3b8" }}>Loading categories…</p>
+            </div>
+          ) : categories.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "60px 0", gap: 8 }}>
+              <FolderTree size={36} color="#e2e8f0" />
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", margin: 0 }}>No categories yet</p>
+              <p style={{ fontSize: 12, color: "#cbd5e1", margin: 0 }}>Create your first category to get started</p>
+            </div>
+          ) : (
+            <div>
+              {categories.map((cat, catIdx) => {
+                const budget = calcBudget(cat);
+                const isExpanded = expandedCategories[cat.id];
+                const over = budget.allocatedAmount > budget.totalBudget;
+                return (
+                  <div key={cat.id} style={{ borderBottom: catIdx < categories.length - 1 ? "1px solid #f8fafc" : "none" }}>
+                    <div className="row-hover" style={{ padding: "16px 20px", transition: "background 0.1s" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                        <button onClick={() => toggleCategory(cat.id)} style={{ width: 26, height: 26, borderRadius: 7, border: "1px solid #f1f5f9", background: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2, color: "#94a3b8" }}>
+                          {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                        </button>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{cat.name}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", padding: "2px 8px", borderRadius: 5 }}>{cat.subcategory_count} subs</span>
+                            {budget.totalBudget > 0 && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: over ? "#e11d48" : "#d97706", background: over ? "#fff1f2" : "#fffbeb", padding: "2px 8px", borderRadius: 5 }}>{budget.percentageUsed.toFixed(1)}% allocated</span>
+                            )}
+                          </div>
+                          {cat.description && <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 10px" }}>{cat.description}</p>}
+                          <div style={{ background: "#fafafa", border: "1px solid #f1f5f9", borderRadius: 10, padding: "12px 16px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 10 }}>
+                              {[
+                                { label: "Category Budget", value: fmt(budget.totalBudget), color: "#0f172a" },
+                                { label: "Allocated to Subs", value: fmt(budget.allocatedAmount), color: over ? "#e11d48" : "#22c55e" },
+                                { label: "Auto-Share %", value: `${cat.allocation_percentage || 0}%`, color: "#d97706" },
+                              ].map((s, i) => (
+                                <div key={i}>
+                                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 3px" }}>{s.label}</p>
+                                  <p style={{ fontSize: 14, fontWeight: 700, color: s.color, margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>{s.value}</p>
                                 </div>
-                                <div className="mt-2">
-                                  <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                                    <div 
-                                      className={`h-full transition-all ${getProgressBarColor(budget.percentageUsed)}`}
-                                      style={{ width: `${Math.min(budget.percentageUsed, 100)}%` }}
-                                    ></div>
-                                  </div>
-                                </div>
-                              </div>
+                              ))}
                             </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>Budget utilization</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: over ? "#e11d48" : "#64748b" }}>{budget.percentageUsed.toFixed(1)}%</span>
+                            </div>
+                            <ProgressBar pct={budget.percentageUsed} over={over} />
                           </div>
-                          <div className="flex gap-2 ml-4">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openSubcategoryModal(category)}
-                              className="gap-1"
-                            >
-                              <Plus className="w-3 h-3" />
-                              Add Sub
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openCategoryModal(category)}
-                              className="gap-1"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDeleteCategory(category)}
-                              className="gap-1 text-red-600 hover:bg-red-50 hover:text-red-700"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          <button onClick={() => openSubcategoryModal(cat)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#64748b", cursor: "pointer", fontFamily: "inherit" }}>
+                            <Plus size={12} /> Add Sub
+                          </button>
+                          <IconBtn onClick={() => openCategoryModal(cat)} title="Edit"><Edit size={13} /></IconBtn>
+                          <IconBtn onClick={() => handleDeleteCategory(cat)} danger title="Delete"><Trash2 size={13} /></IconBtn>
                         </div>
                       </div>
-
-                      {/* Subcategories */}
-                      {expandedCategories[category.id] && category.subcategories && category.subcategories.length > 0 && (
-                        <div className="bg-slate-50 border-t">
-                          <table className="w-full">
-                            <thead>
-                              <tr className="border-b bg-slate-100">
-                                <th className="text-left py-2 px-4 pl-16 text-xs font-semibold text-slate-700">Sub-category Name</th>
-                                <th className="text-left py-2 px-4 text-xs font-semibold text-slate-700">Description</th>
-                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700">Allocated</th>
-                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700">Remaining</th>
-                                <th className="text-right py-2 px-4 text-xs font-semibold text-slate-700">Spent</th>
-                                <th className="text-right py-2 px-4 pr-4 text-xs font-semibold text-slate-700">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {category.subcategories.map((sub) => {
-                                const allocated = parseFloat(sub.allocation_amount || 0);
-                                const remaining = parseFloat(sub.remaining_budget || allocated);
-                                const spent = allocated - remaining;
-                                
-                                return (
-                                  <tr key={sub.id} className="border-b last:border-b-0 hover:bg-white transition-colors">
-                                    <td className="py-3 px-4 pl-16 text-sm font-medium text-slate-900">{sub.name}</td>
-                                    <td className="py-3 px-4 text-sm text-slate-600">{sub.description || '-'}</td>
-                                    <td className="py-3 px-4 text-right">
-                                      <span className="inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
-                                        {formatCurrency(allocated)}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-4 text-right">
-                                      <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
-                                        remaining <= 0 ? 'bg-red-100 text-red-700' :
-                                        remaining < allocated * 0.2 ? 'bg-orange-100 text-orange-700' :
-                                        'bg-emerald-100 text-emerald-700'
-                                      }`}>
-                                        {formatCurrency(remaining)}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-4 text-right">
-                                      <span className="inline-flex items-center px-2.5 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full">
-                                        {formatCurrency(spent)}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-4 pr-4 text-right">
-                                      <div className="flex gap-2 justify-end">
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => handleResetSubcategoryBudget(sub)}
-                                          className="h-8 px-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                                          title="Reset remaining budget to allocated amount"
-                                        >
-                                          <RefreshCw className="w-3 h-3" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => openSubcategoryModal(category, sub)}
-                                          className="h-8 px-2"
-                                        >
-                                          <Edit className="w-3 h-3" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => handleDeleteSubcategory(sub)}
-                                          className="h-8 px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </Button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                              {/* Total Row */}
-                              <tr className="bg-slate-100 border-t-2 border-slate-300">
-                                <td colSpan="2" className="py-3 px-4 pl-16 text-sm font-bold text-slate-900">
-                                  Totals
-                                </td>
-                                <td className="py-3 px-4 text-right">
-                                  <span className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-bold rounded-full">
-                                    {formatCurrency(category.subcategories.reduce((sum, sub) => sum + parseFloat(sub.allocation_amount || 0), 0))}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-right">
-                                  <span className="inline-flex items-center px-3 py-1.5 bg-emerald-100 text-emerald-700 text-sm font-bold rounded-full">
-                                    {formatCurrency(category.subcategories.reduce((sum, sub) => sum + parseFloat(sub.remaining_budget || sub.allocation_amount || 0), 0))}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-right">
-                                  <span className="inline-flex items-center px-3 py-1.5 bg-slate-200 text-slate-700 text-sm font-bold rounded-full">
-                                    {formatCurrency(category.subcategories.reduce((sum, sub) => {
-                                      const allocated = parseFloat(sub.allocation_amount || 0);
-                                      const remaining = parseFloat(sub.remaining_budget || allocated);
-                                      return sum + (allocated - remaining);
-                                    }, 0))}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 pr-4"></td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
+
+                    {isExpanded && cat.subcategories?.length > 0 && (
+                      <div style={{ background: "#fafafa", borderTop: "1px solid #f1f5f9" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ background: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                              {["Sub-category", "Description", "Allocated", "Remaining", "Spent", ""].map((h, i) => (
+                                <th key={i} style={{ padding: "9px 16px", paddingLeft: i === 0 ? 56 : 16, textAlign: i >= 2 && i <= 4 ? "right" : i === 5 ? "right" : "left", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cat.subcategories.map((sub, si) => {
+                              const allocated = parseFloat(sub.allocation_amount || 0);
+                              const remaining = parseFloat(sub.remaining_budget !== undefined ? sub.remaining_budget : allocated);
+                              const spent = allocated - remaining;
+                              const low = remaining < allocated * 0.2;
+                              return (
+                                <tr key={sub.id} className="sub-row" style={{ borderBottom: si < cat.subcategories.length - 1 ? "1px solid #f1f5f9" : "none", transition: "background 0.1s" }}>
+                                  <td style={{ padding: "12px 16px", paddingLeft: 56, fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{sub.name}</td>
+                                  <td style={{ padding: "12px 16px", fontSize: 12, color: "#94a3b8" }}>{sub.description || "—"}</td>
+                                  <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", padding: "3px 9px", borderRadius: 5, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(allocated)}</span>
+                                  </td>
+                                  <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                    <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 5, fontFamily: "'IBM Plex Mono', monospace", color: remaining <= 0 ? "#e11d48" : low ? "#ea580c" : "#16a34a", background: remaining <= 0 ? "#fff1f2" : low ? "#fff7ed" : "#f0fdf4" }}>{fmt(remaining)}</span>
+                                  </td>
+                                  <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", background: "#f8fafc", padding: "3px 9px", borderRadius: 5, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(spent)}</span>
+                                  </td>
+                                  <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                                      <IconBtn onClick={() => handleResetSubcategoryBudget(sub)} title="Reset budget"><RefreshCw size={12} /></IconBtn>
+                                      <IconBtn onClick={() => openSubcategoryModal(cat, sub)} title="Edit"><Edit size={12} /></IconBtn>
+                                      <IconBtn onClick={() => handleDeleteSubcategory(sub)} danger title="Delete"><Trash2 size={12} /></IconBtn>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
+                              <td colSpan={2} style={{ padding: "10px 16px", paddingLeft: 56, fontSize: 12, fontWeight: 700, color: "#0f172a" }}>Totals</td>
+                              {[
+                                { v: cat.subcategories.reduce((s, sub) => s + parseFloat(sub.allocation_amount || 0), 0), c: "#1d4ed8", bg: "#eff6ff" },
+                                { v: cat.subcategories.reduce((s, sub) => s + parseFloat(sub.remaining_budget !== undefined ? sub.remaining_budget : sub.allocation_amount || 0), 0), c: "#16a34a", bg: "#f0fdf4" },
+                                { v: cat.subcategories.reduce((s, sub) => { const a = parseFloat(sub.allocation_amount || 0); const r = parseFloat(sub.remaining_budget !== undefined ? sub.remaining_budget : a); return s + (a - r); }, 0), c: "#64748b", bg: "#f8fafc" },
+                              ].map((t, i) => (
+                                <td key={i} style={{ padding: "10px 16px", textAlign: "right" }}>
+                                  <span style={{ fontSize: 12, fontWeight: 800, color: t.c, background: t.bg, padding: "3px 10px", borderRadius: 6, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(t.v)}</span>
+                                </td>
+                              ))}
+                              <td />
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {!loading && categories.length > 0 && (
-            <div className="border-t-2 border-slate-300 bg-gradient-to-r from-indigo-50 to-slate-50 p-6">
-              <div className="flex justify-between items-center max-w-4xl mx-auto">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">Total Department Budget:</h3>
-                  <p className="text-xs text-slate-600 mt-1">Allocated to categories (FY {new Date().getFullYear()})</p>
+            <div style={{ padding: "16px 24px", borderTop: "2px solid #f1f5f9", background: "#fafafa", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", margin: "0 0 2px" }}>Department Overview</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", margin: 0 }}>Active Fiscal Year {selectedYear}</p>
+              </div>
+              <div style={{ display: "flex", gap: 28 }}>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 3px" }}>Total Allocation</p>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>
+                    {fmt(categories.reduce((s, c) => s + parseFloat(c.allocation_amount || c.total_budget || 0), 0))}
+                  </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-indigo-700">
-                    {(() => {
-                      // Sum up the allocation_amount or total_budget from each category
-                      const total = categories.reduce((sum, cat) => {
-                        const amount = parseFloat(cat.allocation_amount || cat.total_budget || 0);
-                        return sum + amount;
-                      }, 0);
-                      return formatCurrency(total);
-                    })()}
-                  </p>
-                  <p className="text-xs text-slate-600 mt-1">
-                    across {categories.length} {categories.length === 1 ? 'category' : 'categories'}
-                  </p>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 3px" }}>Auto-Dist. Rule</p>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: totalPct === 100 ? "#22c55e" : "#f59e0b", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>{totalPct.toFixed(1)}%</p>
+                  {totalPct !== 100 && <p style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", margin: "2px 0 0" }}>Must be 100%</p>}
                 </div>
               </div>
             </div>
           )}
-        </Card>
+        </div>
 
-        {/* Category Modal */}
+        {/* CATEGORY MODAL */}
         {showCategoryModal && (
-          <div className="fixed inset-0 backdrop-blur-lg flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-lg">
-              <CardHeader className="border-b">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">
-                    {editingCategory ? 'Edit Category' : 'Create New Category'}
-                  </CardTitle>
-                  <button onClick={closeCategoryModal} className="p-1 hover:bg-slate-100 rounded">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Category Name *</label>
-                  <Input
-                    value={categoryForm.name}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                    placeholder="e.g., Facility Development"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Total Budget (PHP) *</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={categoryForm.total_budget}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, total_budget: e.target.value })}
-                    placeholder="e.g., 500000.00"
-                  />
-                  {editingCategory && (
-                    <p className="text-xs text-amber-600">
-                      ⚠️ Current allocated: {formatCurrency(calculateCategoryBudget(editingCategory).allocatedAmount)}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Description</label>
-                  <textarea
-                    value={categoryForm.description}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                    placeholder="Brief description of this category"
-                    className="w-full min-h-[100px] px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    onClick={handleSaveCategory}
-                    disabled={loading || !categoryForm.name.trim() || !categoryForm.total_budget}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    {editingCategory ? 'Update' : 'Create'} Category
-                  </Button>
-                  <Button
-                    onClick={closeCategoryModal}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <Modal onClose={closeCategoryModal}>
+            <ModalHeader title={editingCategory ? "Edit Category" : "New Category"} onClose={closeCategoryModal} />
+            <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Category Name *</label>
+                <input className="focus-gold" value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="e.g., Facility Development" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Total Budget (PHP) *</label>
+                <input className="focus-gold" type="number" min="0" step="0.01" value={categoryForm.total_budget} onChange={(e) => setCategoryForm({ ...categoryForm, total_budget: e.target.value })} placeholder="500000.00" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Allocation Share (%) *</label>
+                <input className="focus-gold" type="number" min="0" max="100" step="0.1" value={categoryForm.allocation_percentage} onChange={(e) => setCategoryForm({ ...categoryForm, allocation_percentage: e.target.value })} placeholder="25" style={inputStyle} />
+                <p style={{ fontSize: 11, color: "#94a3b8", margin: "5px 0 0", fontStyle: "italic" }}>% of funds auto-distributed here during "Auto" mode</p>
+              </div>
+              <div>
+                <label style={labelStyle}>Description</label>
+                <textarea className="focus-gold" value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} placeholder="Brief description…" style={{ ...inputStyle, minHeight: 90, resize: "vertical" }} />
+              </div>
+              <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
+                <button onClick={handleSaveCategory} disabled={loading || !categoryForm.name.trim() || !categoryForm.total_budget}
+                  style={{ flex: 1, padding: "11px 0", background: (!categoryForm.name.trim() || !categoryForm.total_budget) ? "#f1f5f9" : "#0f172a", color: (!categoryForm.name.trim() || !categoryForm.total_budget) ? "#94a3b8" : "#fde68a", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: (!categoryForm.name.trim() || !categoryForm.total_budget) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "inherit" }}>
+                  <Save size={14} /> {editingCategory ? "Update" : "Create"} Category
+                </button>
+                <button onClick={closeCategoryModal} style={{ flex: 1, padding: "11px 0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontWeight: 700, color: "#64748b", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+              </div>
+            </div>
+          </Modal>
         )}
 
-        {/* Subcategory Modal */}
-        {showSubcategoryModal && (
-          <div className="fixed inset-0 backdrop-blur-lg flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-lg">
-              <CardHeader className="border-b">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">
-                    {editingSubcategory ? 'Edit Sub-category' : 'Create New Sub-category'}
-                  </CardTitle>
-                  <button onClick={closeSubcategoryModal} className="p-1 hover:bg-slate-100 rounded">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                {currentCategory && (() => {
-                  const budget = calculateCategoryBudget(currentCategory);
-                  const oldAmount = editingSubcategory ? parseFloat(editingSubcategory.allocation_amount || 0) : 0;
-                  const availableBudget = budget.remainingBudget + oldAmount;
-
-                  return (
-                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <p className="text-xs font-medium text-slate-700 mb-2">Category Budget Status:</p>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-slate-600">Total Budget:</span>
-                          <p className="font-bold text-slate-900">{formatCurrency(budget.totalBudget)}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-600">Available:</span>
-                          <p className={`font-bold ${getBudgetStatusColor(availableBudget, budget.totalBudget)}`}>
-                            {formatCurrency(availableBudget)}
-                          </p>
-                        </div>
-                      </div>
+        {/* SUBCATEGORY MODAL */}
+        {showSubcategoryModal && currentCategory && (() => {
+          const budget = calcBudget(currentCategory);
+          const oldAmount = editingSubcategory ? parseFloat(editingSubcategory.allocation_amount || 0) : 0;
+          const availableBudget = budget.remainingBudget + oldAmount;
+          const enteredAmount = parseFloat(subcategoryForm.allocation_amount || 0);
+          const isOver = enteredAmount > availableBudget;
+          const disabledSave = loading || isOver || !subcategoryForm.name.trim() || subcategoryForm.allocation_amount === "";
+          return (
+            <Modal onClose={closeSubcategoryModal}>
+              <ModalHeader title={editingSubcategory ? "Edit Sub-category" : "New Sub-category"} onClose={closeSubcategoryModal} />
+              <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ background: "#fafafa", border: "1px solid #f1f5f9", borderRadius: 10, padding: "12px 16px" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 10px" }}>Category budget status</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 3px" }}>Total category</p>
+                      <p style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(budget.totalBudget)}</p>
                     </div>
-                  );
-                })()}
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Sub-category Name *</label>
-                  <Input
-                    value={subcategoryForm.name}
-                    onChange={(e) => setSubcategoryForm({ ...subcategoryForm, name: e.target.value })}
-                    placeholder="e.g., Building Maintenance"
-                  />
+                    <div style={{ textAlign: "right" }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 3px" }}>Available for subs</p>
+                      <p style={{ fontSize: 15, fontWeight: 800, color: availableBudget > 0 ? "#d97706" : "#e11d48", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(availableBudget)}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Allocation Amount (PHP) *</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={subcategoryForm.allocation_amount}
+                <div>
+                  <label style={labelStyle}>Sub-category Name *</label>
+                  <input className="focus-gold" value={subcategoryForm.name} onChange={(e) => setSubcategoryForm({ ...subcategoryForm, name: e.target.value })} placeholder="e.g., Building Maintenance" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Allocation Amount (PHP) *</label>
+                  <input className="focus-gold" type="number" min="0" step="0.01" value={subcategoryForm.allocation_amount}
                     onChange={(e) => setSubcategoryForm({ ...subcategoryForm, allocation_amount: e.target.value })}
-                    placeholder="e.g., 50000.00"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Set the budget amount for this sub-category
-                  </p>
+                    placeholder="50000.00" style={{ ...inputStyle, borderColor: isOver ? "#fca5a5" : "#e2e8f0" }} />
+                  {isOver && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, padding: "8px 12px", background: "#fff1f2", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 7 }}>
+                      <AlertTriangle size={13} color="#e11d48" />
+                      <p style={{ fontSize: 11, fontWeight: 700, color: "#9f1239", margin: 0 }}>Exceeds available — max {fmt(availableBudget)}</p>
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Description</label>
-                  <textarea
-                    value={subcategoryForm.description}
-                    onChange={(e) => setSubcategoryForm({ ...subcategoryForm, description: e.target.value })}
-                    placeholder="Brief description of this sub-category"
-                    className="w-full min-h-[100px] px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                <div>
+                  <label style={labelStyle}>Description</label>
+                  <textarea className="focus-gold" value={subcategoryForm.description} onChange={(e) => setSubcategoryForm({ ...subcategoryForm, description: e.target.value })} placeholder="Brief description…" style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} />
                 </div>
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    onClick={handleSaveSubcategory}
-                    disabled={loading || !subcategoryForm.name.trim() || (!subcategoryForm.allocation_amount && subcategoryForm.allocation_amount !== 0)}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    {editingSubcategory ? 'Update' : 'Create'} Sub-category
-                  </Button>
-                  <Button
-                    onClick={closeSubcategoryModal}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
+                <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
+                  <button onClick={handleSaveSubcategory} disabled={disabledSave}
+                    style={{ flex: 1, padding: "11px 0", background: disabledSave ? "#f1f5f9" : "#0f172a", color: disabledSave ? "#94a3b8" : "#fde68a", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: disabledSave ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "inherit" }}>
+                    <Save size={14} /> {isOver ? "Exceeds Budget" : editingSubcategory ? "Update" : "Create"} Sub-category
+                  </button>
+                  <button onClick={closeSubcategoryModal} style={{ flex: 1, padding: "11px 0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontWeight: 700, color: "#64748b", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </Modal>
+          );
+        })()}
+
+        {/* DELETE MODAL */}
+        {showDeleteModal && deleteTarget && (
+          <Modal onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }}>
+            <ModalHeader title="Confirm Deletion" onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} />
+            <div style={{ padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "#fff1f2", border: "1px solid rgba(239,68,68,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <AlertTriangle size={18} color="#e11d48" />
+                </div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "#0f172a", margin: "0 0 5px" }}>Delete <strong>{deleteTarget.data.name}</strong>?</p>
+                  {deleteTarget.type === "category" && deleteTarget.data.subcategory_count > 0 && (
+                    <p style={{ fontSize: 12, color: "#e11d48", margin: 0 }}>This category has {deleteTarget.data.subcategory_count} sub-categories. Delete all sub-categories first.</p>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={confirmDelete} disabled={loading || (deleteTarget.type === "category" && deleteTarget.data.subcategory_count > 0)}
+                  style={{ flex: 1, padding: "11px 0", background: (loading || (deleteTarget.type === "category" && deleteTarget.data.subcategory_count > 0)) ? "#f1f5f9" : "#e11d48", color: (loading || (deleteTarget.type === "category" && deleteTarget.data.subcategory_count > 0)) ? "#94a3b8" : "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                  {loading ? "Deleting…" : "Delete"}
+                </button>
+                <button onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); }} style={{ flex: 1, padding: "11px 0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontWeight: 700, color: "#64748b", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+              </div>
+            </div>
+          </Modal>
         )}
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteModal && deleteTarget && (
-          <div className="fixed inset-0 backdrop-blur-lg flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md">
-              <CardHeader className="border-b">
-                <CardTitle className="text-lg flex items-center gap-2 text-red-700">
-                  <AlertTriangle className="w-5 h-5" />
-                  Confirm Deletion
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <p className="text-slate-700 mb-4">
-                  Are you sure you want to delete <strong>{deleteTarget.data.name}</strong>?
-                  {deleteTarget.type === 'category' && deleteTarget.data.subcategory_count > 0 && (
-                    <span className="block mt-2 text-sm text-red-600">
-                      ⚠️ This category has {deleteTarget.data.subcategory_count} sub-categories. 
-                      You must delete all sub-categories first.
-                    </span>
-                  )}
-                </p>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={confirmDelete}
-                    disabled={loading || (deleteTarget.type === 'category' && deleteTarget.data.subcategory_count > 0)}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    {loading ? 'Deleting...' : 'Delete'}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setShowDeleteModal(false);
-                      setDeleteTarget(null);
-                    }}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
-    </DeptLayout>
+    </UnifiedLayout>
   );
 };
 

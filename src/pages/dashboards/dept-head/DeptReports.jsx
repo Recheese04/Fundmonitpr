@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from "react-hot-toast";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,9 +34,10 @@ import {
   TrendingUp
 } from "lucide-react";
 import DeptLayout from "../../../components/layout/DeptLayout";
+import API_URL_CONFIG from "@/apiConfig";
 
-const API_URL = "http://localhost/fundmonitor-api/dept_expenses.php";
-const BASE_URL = "http://localhost/fundmonitor-api/"; 
+const API_URL = `${API_URL_CONFIG}/dept_expenses.php`;
+const BASE_URL = `${API_URL_CONFIG}/`; 
 
 const DeptReports = () => {
   const [reports, setReports] = useState([]);
@@ -75,7 +77,7 @@ const DeptReports = () => {
   // Route to different files based on the status
   // Approvals trigger budget deduction logic
   const endpoint = newStatus === 'approved' 
-    ? "http://localhost/fundmonitor-api/approve_expense.php" 
+    ? `${API_URL_CONFIG}/approve_expense.php` 
     : `${API_URL}?action=update_status`;
 
   try {
@@ -149,6 +151,9 @@ useEffect(() => {
     totalAmount: filteredReports.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0),
     approvedAmount: filteredReports
       .filter(r => r.status === 'approved')
+      .reduce((sum, r) => sum + parseFloat(r.amount || 0), 0),
+    pendingAmount: filteredReports
+      .filter(r => r.status === 'pending')
       .reduce((sum, r) => sum + parseFloat(r.amount || 0), 0)
   };
 
@@ -176,6 +181,19 @@ useEffect(() => {
 
   return (
     <DeptLayout title="Department Reports">
+      <style>{`
+        @media print {
+          .print\\:hidden, header, aside, .no-print { display: none !important; }
+          main { margin-left: 0 !important; padding: 0 !important; width: 100% !important; }
+          body { background: white !important; color: black !important; }
+          .DeptLayout_header { display: none !important; }
+          .space-y-6 { space-y: 0 !important; }
+          .p-6 { padding: 0 !important; }
+          table { width: 100% !important; border-collapse: collapse !important; margin-top: 20px !important; }
+          th, td { border: 1px solid #000 !important; padding: 10px !important; font-size: 10pt !important; text-align: left !important; }
+          th { background-color: #f2f2f2 !important; font-weight: bold !important; }
+        }
+      `}</style>
       <div className="space-y-6 p-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
@@ -195,8 +213,43 @@ useEffect(() => {
             </Button>
             <Button 
               variant="outline" 
-              onClick={() => window.print()}
+              onClick={() => {
+                if (filteredReports.length === 0) {
+                  toast.error("No records to export.");
+                  return;
+                }
+                const headers = ["ID", "Date", "Staff Name", "Role", "Category", "Description", "Amount (PHP)", "Status"];
+                const rows = filteredReports.map(e => [
+                  e.id, 
+                  e.expense_date, 
+                  `"${e.staff_name}"`, 
+                  `"${e.staff_role || 'Staff'}"`, 
+                  `"${e.subcategory_name || 'General'}"`, 
+                  `"${e.description || ''}"`, 
+                  e.amount, 
+                  e.status.toUpperCase()
+                ]);
+                const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `Department_Expenses_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success("Department Expenses exported successfully!");
+              }}
               className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => window.print()}
+              className="gap-2 bg-slate-900 text-white hover:bg-slate-800 hover:text-white"
             >
               <Printer className="w-4 h-4" />
               Print
@@ -256,29 +309,48 @@ useEffect(() => {
         </div>
 
         {/* Amount Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:hidden">
-          <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-200">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:hidden">
+          <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-200 shadow-sm">
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Total Amount</p>
-                  <p className="text-3xl font-bold text-indigo-700">{formatCurrency(stats.totalAmount)}</p>
-                  <p className="text-xs text-slate-600 mt-1">All filtered expenses</p>
+                  <p className="text-sm font-black text-slate-500 uppercase tracking-wider">Total Filed</p>
+                  <p className="text-3xl font-black text-indigo-700 tabular-nums">{formatCurrency(stats.totalAmount)}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">All filtered records</p>
                 </div>
-                <DollarSign className="w-12 h-12 text-indigo-400 opacity-50" />
+                <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-indigo-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
           
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+          <Card className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200 shadow-sm">
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Approved Amount</p>
-                  <p className="text-3xl font-bold text-green-700">{formatCurrency(stats.approvedAmount)}</p>
-                  <p className="text-xs text-slate-600 mt-1">Successfully approved</p>
+                  <p className="text-sm font-black text-emerald-600 uppercase tracking-wider">Approved</p>
+                  <p className="text-3xl font-black text-emerald-700 tabular-nums">{formatCurrency(stats.approvedAmount)}</p>
+                  <p className="text-[10px] text-emerald-600/60 font-bold uppercase mt-1">Deducted from budget</p>
                 </div>
-                <TrendingUp className="w-12 h-12 text-green-400 opacity-50" />
+                <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200 shadow-sm">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-black text-amber-600 uppercase tracking-wider">Pending</p>
+                  <p className="text-3xl font-black text-amber-700 tabular-nums">{formatCurrency(stats.pendingAmount)}</p>
+                  <p className="text-[10px] text-amber-600/60 font-bold uppercase mt-1">Reserved funds</p>
+                </div>
+                <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-amber-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
