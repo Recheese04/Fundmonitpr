@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd FundMonitor-react-vite && npm install && npm run build",
+  "outputDirectory": "FundMonitor-react-vite/dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "FundMonitor-react-vite/index.html" }
+  ]
+}
