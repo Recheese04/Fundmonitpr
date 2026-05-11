@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import UnifiedLayout from "@/components/layout/UnifiedLayout";
 import { MessageSquare, CheckCircle, XCircle, User, Shield, AlertCircle } from "lucide-react";
 import API_URL from "@/apiConfig";
@@ -32,7 +33,7 @@ export default function Approvals() {
 
   const handleAction = async (id, status) => {
     if (status === 'rejected' && !rejectReason.trim()) {
-      alert("Please provide a rejection reason.");
+      toast.error("Please provide a rejection reason.");
       return;
     }
 
@@ -40,7 +41,7 @@ export default function Approvals() {
       const formData = new FormData();
       formData.append("id", id);
       formData.append("status", status);
-      formData.append("user_id", user.id);
+      formData.append("user_id", user.user_id || user.id);
       if (status === 'rejected') {
         formData.append("rejection_reason", rejectReason);
       }
@@ -53,16 +54,17 @@ export default function Approvals() {
       const data = await res.json();
       if (data.success) {
         setPendingRequests(pendingRequests.filter(r => r.id !== id));
+        toast.success(`Expense ${status} successfully!`);
         if (status === 'rejected') {
           setRejectingId(null);
           setRejectReason("");
         }
       } else {
-        alert("Action failed: " + data.message);
+        toast.error("Action failed: " + data.message);
       }
     } catch (e) {
       console.error(e);
-      alert("An error occurred");
+      toast.error("An error occurred during the update.");
     }
   };
 
@@ -125,7 +127,7 @@ export default function Approvals() {
                     {req.receipt_path && (
                       <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: 12, border: "1px dashed #e2e8f0", display: "flex", gap: 10 }}>
                         <MessageSquare size={14} color="#cbd5e1" style={{ marginTop: 2, flexShrink: 0 }} />
-                        <a href={`${API_URL}/../${req.receipt_path}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#3b82f6", fontWeight: 600, margin: 0, textDecoration: "none" }}>View Attached Document</a>
+                        <a href={`${API_URL}/${req.receipt_path}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#3b82f6", fontWeight: 600, margin: 0, textDecoration: "none" }}>View Attached Document</a>
                       </div>
                     )}
 

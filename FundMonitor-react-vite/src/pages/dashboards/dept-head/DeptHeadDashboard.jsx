@@ -102,7 +102,7 @@ const DeptHeadDashboard = () => {
               </div>
             </div>
             <div className="dh-stat-val">{formatPHP(remainingBudget)}</div>
-            <div className="dh-chart-bar"><div className="dh-chart-fill" style={{ width: \`\${100 - utilizationRate}%\`, background: '#16a34a' }}></div></div>
+            <div className="dh-chart-bar"><div className="dh-chart-fill" style={{ width: `${100 - utilizationRate}%`, background: '#16a34a' }}></div></div>
           </div>
           
           <div className="dh-card dh-stat">
@@ -113,7 +113,7 @@ const DeptHeadDashboard = () => {
               </div>
             </div>
             <div className="dh-stat-val">{formatPHP(approvedExpenses)}</div>
-            <div className="dh-chart-bar"><div className="dh-chart-fill" style={{ width: \`\${utilizationRate}%\`, background: '#64748b' }}></div></div>
+            <div className="dh-chart-bar"><div className="dh-chart-fill" style={{ width: `${utilizationRate}%`, background: '#64748b' }}></div></div>
           </div>
           
           <div className="dh-card dh-stat">
@@ -148,7 +148,7 @@ const DeptHeadDashboard = () => {
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', fontFamily: "'IBM Plex Mono', monospace" }}>{cat.allocated}</span>
                       </div>
                       <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', background: '#3b82f6', width: \`\${cat.allocation_percentage}%\` }}></div>
+                        <div style={{ height: '100%', background: '#3b82f6', width: `${cat.allocation_percentage}%` }}></div>
                       </div>
                       <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', marginTop: 4, textAlign: 'right' }}>{cat.allocation_percentage}% OF TOTAL</div>
                     </div>

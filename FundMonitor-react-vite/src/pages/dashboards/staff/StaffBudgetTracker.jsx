@@ -23,7 +23,8 @@ import {
   CheckCircle2,
   Paperclip,
   PlusCircle,
-  FileText
+  FileText,
+  Download
 } from "lucide-react";
 import UnifiedLayout from "@/components/layout/UnifiedLayout";
 import API_URL from "@/apiConfig";
@@ -276,8 +277,33 @@ const StaffBudgetTracker = () => {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handleExport = () => {
+    // Gather rows for CSV: Category, Subcategory, Allocation, Remaining, Balance
+    const rows = [
+      ['Category', 'Subcategory', 'Allocation', 'Remaining', 'Balance']
+    ];
+    categories.forEach(cat => {
+      (cat.subcategories || []).forEach(sub => {
+        rows.push([
+          cat.name,
+          sub.name,
+          parseFloat(sub.allocation_amount || 0).toFixed(2),
+          parseFloat(sub.effective_balance || 0).toFixed(2),
+          parseFloat(sub.remaining_budget || 0).toFixed(2)
+        ]);
+      });
+    });
+    // Convert rows to CSV string
+    const csvContent = rows.map(row => row.map(value => `"${value}"`).join(',')).join('\n');
+    // Create Blob and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `budget_${selectedYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const totalRemaining = categories.reduce((sum, cat) => sum + calculateCategoryBudget(cat).remainingBudget, 0);
@@ -317,10 +343,58 @@ const StaffBudgetTracker = () => {
           font-size: 14px; font-weight: 600; outline: none; transition: all 0.15s;
         }
         .compact-input:focus { border-color: #5D3CFE; background: #fff; box-shadow: 0 0 0 3px rgba(93,60,254,0.1); }
+        
+        @media print {
+          @page { margin: 15mm; }
+          .sbt-welcome, .btn-exec, .sbt-card:not(.sbt-main-list), [style*="grid-template-columns: 1fr 1fr"], .no-print {
+            display: none !important;
+          }
+          .sbt-main-list { 
+            border: none !important; 
+            padding: 0 !important; 
+            box-shadow: none !important;
+          }
+          .print-only { display: block !important; }
+          .sub-table { 
+            border: 1px solid #000 !important; 
+            margin-top: 10px;
+          }
+          .sub-table th { 
+            background: #f8f9fa !important; 
+            color: #000 !important;
+            border-bottom: 2px solid #000 !important;
+          }
+          .sub-table td { 
+            border-bottom: 1px solid #eee !important;
+            color: #000 !important;
+          }
+          .cat-row { 
+            background: #f0f0f0 !important; 
+            border: 1px solid #ccc !important;
+            break-inside: avoid;
+            margin-top: 20px;
+          }
+          button[style*="background: #f1f5f9"] { display: none !important; }
+          .cat-row > div { margin-left: 0 !important; }
+        }
       `}</style>
 
       <div className="sbt-root" style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 40 }}>
         
+        {/* PRINT ONLY HEADER */}
+        <div className="print-only" style={{ display: "none", marginBottom: 30, borderBottom: "3px solid #0f172a", paddingBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            <div>
+              <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: 0 }}>BUDGET ALLOCATION REPORT</h1>
+              <p style={{ fontSize: 14, fontWeight: 600, color: "#64748b", margin: "4px 0 0" }}>OFFICIAL FISCAL TELEMETRY</p>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", margin: 0 }}>{user?.department_name?.toUpperCase()}</p>
+              <p style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", margin: 0 }}>FISCAL YEAR {selectedYear}</p>
+            </div>
+          </div>
+        </div>
+
         {/* HEADER SECTION */}
         <div className="sbt-welcome">
           <div style={{ position: "relative", zIndex: 1 }}>
@@ -342,8 +416,11 @@ const StaffBudgetTracker = () => {
             <button onClick={() => openExpenseModal()} className="btn-exec btn-primary">
               <PlusCircle size={14} /> New Request
             </button>
-            <button onClick={handlePrint} className="btn-exec btn-secondary">
-              <Printer size={14} /> Export
+            <button onClick={handleExport} className="btn-exec btn-secondary">
+              <Download size={14} /> Export CSV
+            </button>
+            <button onClick={() => window.print()} className="btn-exec btn-secondary">
+              <Printer size={14} /> Print
             </button>
           </div>
         </div>
@@ -367,7 +444,7 @@ const StaffBudgetTracker = () => {
         </div>
 
         {/* MAIN LIST */}
-        <div className="sbt-card" style={{ padding: 0 }}>
+        <div className="sbt-card sbt-main-list" style={{ padding: 0 }}>
           <div style={{ padding: "12px 20px", borderBottom: "1px solid #f8fafc", background: "#fafafa", display: "flex", alignItems: "center", gap: 8 }}>
             <FolderTree size={14} color="#94a3b8" />
             <span style={{ fontSize: 11, fontWeight: 800, color: "#475569", textTransform: "uppercase" }}>Financial Structure</span>
@@ -409,7 +486,7 @@ const StaffBudgetTracker = () => {
                             <tr>
                               <th>Financial Item</th>
                               <th>Current Balance</th>
-                              <th style={{ textAlign: "right" }}>Action</th>
+                              <th className="no-print" style={{ textAlign: "right" }}>Action</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -427,7 +504,7 @@ const StaffBudgetTracker = () => {
                                       {formatCurrency(remaining)}
                                     </span>
                                   </td>
-                                  <td style={{ textAlign: "right" }}>
+                                  <td className="no-print" style={{ textAlign: "right" }}>
                                     <button 
                                       onClick={() => openExpenseModal(category, sub)}
                                       disabled={isEmpty}

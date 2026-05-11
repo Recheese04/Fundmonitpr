@@ -232,6 +232,19 @@ export default function UnifiedLayout({ children, title, subtitle, stats }) {
             background: #94a3b8;
           }
         `}} />
+        <style dangerouslySetInnerHTML={{
+          __html: `
+          @media print {
+            .h-screen { height: auto !important; overflow: visible !important; }
+            .overflow-hidden { overflow: visible !important; }
+            .overflow-y-auto { overflow: visible !important; }
+            .lg\\:ml-64 { margin-left: 0 !important; }
+            aside, header, nav, .sidebar { display: none !important; }
+            main { padding: 0 !important; margin: 0 !important; }
+            footer { display: none !important; }
+            body { background: white !important; }
+          }
+        `}} />
       </div>
     </div>
   );

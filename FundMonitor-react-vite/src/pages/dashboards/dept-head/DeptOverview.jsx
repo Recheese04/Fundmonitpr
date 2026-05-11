@@ -131,7 +131,7 @@ export default function DeptOverview() {
               Real-time fiscal snapshot — FY {new Date().getFullYear()}
             </p>
           </div>
-          <button className="btn-primary" onClick={() => navigate('/dept-head/approvals')}>
+          <button className="btn-primary" onClick={() => navigate('/dept-approvals')}>
             <Clock size={15} />
             Review Pending Requests
           </button>
@@ -220,7 +220,7 @@ export default function DeptOverview() {
         <div style={{ background: "#fff", border: "1px solid #f1f5f9", borderRadius: 16, overflow: "hidden" }}>
           <div style={{ padding: "16px 24px", borderBottom: "1px solid #f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: 0 }}>Recent Expenditures</p>
-            <button className="btn-ghost" onClick={() => navigate('/dept-head/approvals')}>View all →</button>
+            <button className="btn-ghost" onClick={() => navigate('/dept-approvals')}>View all →</button>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
