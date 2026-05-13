@@ -336,15 +336,48 @@ function getCategoriesWithBudget($conn) {
                 $sub_id = intval($sub['id']);
                 $amt = floatval($sub['allocation_amount'] ?? 0);
                 
-                // Fetch pending expenses for this sub-category
-                $pendingQuery = "SELECT SUM(amount) as pending FROM expenses WHERE subcategory_id = $sub_id AND status = 'pending'";
+                // Fetch pending expenses for this sub-category and department in the current fiscal year
+                $fy_res_inner = mysqli_query($conn, "SELECT id FROM fiscal_years WHERE year = $year LIMIT 1");
+                $fy_row_inner = mysqli_fetch_assoc($fy_res_inner);
+                $innerFiscalYearId = $fy_row_inner ? intval($fy_row_inner['id']) : 0;
+                
+                $pendingQuery = "SELECT SUM(amount) as pending FROM expenses 
+                                 WHERE subcategory_id = $sub_id 
+                                 AND status = 'pending'";
+                if ($innerFiscalYearId > 0) {
+                    $pendingQuery .= " AND fiscal_year_id = $innerFiscalYearId";
+                }
                 $pendingResult = mysqli_query($conn, $pendingQuery);
                 $pendingRow = mysqli_fetch_assoc($pendingResult);
                 $pendingAmt = floatval($pendingRow['pending'] ?? 0);
 
+                // Fetch the individual pending expense records for display
+                $pendingListQuery = "SELECT e.id, e.amount, e.description, e.expense_date, u.full_name as user_name
+                                     FROM expenses e
+                                     LEFT JOIN users u ON e.user_id = u.id
+                                     WHERE e.subcategory_id = $sub_id AND e.status = 'pending'";
+                if ($innerFiscalYearId > 0) {
+                    $pendingListQuery .= " AND e.fiscal_year_id = $innerFiscalYearId";
+                }
+                $pendingListQuery .= " ORDER BY e.created_at DESC";
+                $pendingListResult = mysqli_query($conn, $pendingListQuery);
+                $pendingExpenses = [];
+                if ($pendingListResult) {
+                    while ($pRow = mysqli_fetch_assoc($pendingListResult)) {
+                        $pendingExpenses[] = [
+                            'id'           => intval($pRow['id']),
+                            'amount'       => floatval($pRow['amount']),
+                            'description'  => $pRow['description'],
+                            'expense_date' => $pRow['expense_date'],
+                            'user_name'    => $pRow['user_name'] ?? 'Staff'
+                        ];
+                    }
+                }
+
                 $sub['allocation_amount'] = $amt;
                 $sub['remaining_budget'] = floatval($sub['remaining_budget'] ?? 0);
                 $sub['pending_amount'] = $pendingAmt;
+                $sub['pending_expenses'] = $pendingExpenses;
                 $sub['effective_balance'] = $sub['remaining_budget'] - $pendingAmt;
                 
                 $subcategories[] = $sub;

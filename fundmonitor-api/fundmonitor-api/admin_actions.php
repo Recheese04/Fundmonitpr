@@ -241,6 +241,61 @@ if ($action == 'allocate' && $_SERVER['REQUEST_METHOD'] == 'POST') {
 
             if (mysqli_query($conn, $sql)) {
                 $success_count++;
+
+                // --- AUTO ALLOCATE TO CATEGORIES ---
+                $catQuery = "SELECT name, (allocation_percentage / 100) as pct 
+                             FROM categories 
+                             WHERE department_id = $dept_id AND fiscal_year_id = $fiscalYearId";
+                $catRes = mysqli_query($conn, $catQuery);
+                
+                $categoryAllocations = [];
+                if ($catRes && mysqli_num_rows($catRes) > 0) {
+                    while ($row = mysqli_fetch_assoc($catRes)) {
+                        if (floatval($row['pct']) > 0) {
+                            $categoryAllocations[$row['name']] = floatval($row['pct']);
+                        }
+                    }
+                }
+                
+                // If no valid percentages found, use fallback
+                if (empty($categoryAllocations)) {
+                    $categoryAllocations = [
+                        'Personnel Services' => 0.45,
+                        'MOOE' => 0.30,
+                        'Capital Outlay' => 0.15,
+                        'Financial Subsidy' => 0.10
+                    ];
+                }
+
+                foreach ($categoryAllocations as $categoryName => $catPercentage) {
+                    $categoryBudget = round($amount * $catPercentage, 2);
+                    $categoryNameEsc = mysqli_real_escape_string($conn, $categoryName);
+                    
+                    $checkCat = mysqli_query($conn, 
+                        "SELECT id FROM categories 
+                         WHERE name = '$categoryNameEsc' AND department_id = $dept_id AND fiscal_year_id = $fiscalYearId"
+                    );
+                    
+                    if ($checkCat && mysqli_num_rows($checkCat) > 0) {
+                        $catRow = mysqli_fetch_assoc($checkCat);
+                        $catId = $catRow['id'];
+                        $updateCat = "UPDATE categories 
+                                     SET total_budget = $categoryBudget,
+                                         allocation_amount = $categoryBudget,
+                                         allocation_percentage = " . ($catPercentage * 100) . "
+                                     WHERE id = $catId";
+                        mysqli_query($conn, $updateCat);
+                    } else {
+                        $insertCat = "INSERT INTO categories (
+                                        name, department_id, fiscal_year_id, total_budget, allocation_amount, allocation_percentage, description, created_at
+                                     ) VALUES (
+                                        '$categoryNameEsc', $dept_id, $fiscalYearId, $categoryBudget, $categoryBudget, " . ($catPercentage * 100) . ", '', NOW()
+                                     )";
+                        mysqli_query($conn, $insertCat);
+                    }
+                }
+                // -----------------------------------
+
             } else {
                 $errors[] = mysqli_error($conn);
             }

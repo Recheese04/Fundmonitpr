@@ -20,6 +20,7 @@ if ($action == 'get_reports') {
             JOIN users u ON e.user_id = u.id 
             LEFT JOIN sub_categories sc ON e.subcategory_id = sc.id
             WHERE u.department_id = ? 
+            AND u.role = 'staff'
             ORDER BY e.expense_date DESC";
             
     $stmt = $conn->prepare($sql);
@@ -72,5 +73,100 @@ if ($action == 'update_status') {
     } else {
         echo json_encode(["success" => false, "message" => $conn->error]);
     }
+}
+
+// ACTION: get_audit_trail
+if ($action == 'get_audit_trail') {
+    $dept_id = isset($_GET['department_id']) ? intval($_GET['department_id']) : 0;
+
+    $sql = "SELECT ea.*, 
+            u.full_name as actor_name, 
+            u.role as actor_role,
+            e.description as expense_desc,
+            e.amount as expense_amount,
+            sc.name as subcategory_name,
+            staff.full_name as staff_name
+            FROM expense_audits ea
+            JOIN users u ON ea.user_id = u.id
+            JOIN expenses e ON ea.expense_id = e.id
+            JOIN sub_categories sc ON e.subcategory_id = sc.id
+            JOIN users staff ON e.user_id = staff.id
+            WHERE staff.department_id = ? 
+            ORDER BY ea.created_at DESC";
+            
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $dept_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $data = [];
+    while ($row = $result->fetch_assoc()) {
+        $data[] = $row;
+    }
+    echo json_encode(["success" => true, "data" => $data]);
+}
+
+// ACTION: send_notification
+if ($action == 'send_notification') {
+    $user_id = $_POST['user_id'] ?? 0;
+    $title = $_POST['title'] ?? '';
+    $message = $_POST['message'] ?? '';
+    $type = $_POST['type'] ?? 'info';
+    
+    if ($user_id > 0) {
+        $stmt = $conn->prepare("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("isss", $user_id, $title, $message, $type);
+        $stmt->execute();
+        echo json_encode(["success" => true]);
+    } else {
+        echo json_encode(["success" => false, "message" => "Invalid user ID"]);
+    }
+}
+
+// ACTION: submit_report (Saves a CSV file and records the submission)
+if ($action == 'submit_report') {
+    $dept_id = $_POST['department_id'] ?? 0;
+    $user_id = $_POST['user_id'] ?? 0;
+    $year = $_POST['fiscal_year'] ?? date('Y');
+    
+    if (isset($_FILES['report_file'])) {
+        $uploadDir = 'uploads/submissions/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+        
+        $fileName = 'dept_' . $dept_id . '_' . time() . '.csv';
+        $filePath = $uploadDir . $fileName;
+        
+        if (move_uploaded_file($_FILES['report_file']['tmp_name'], $filePath)) {
+            $stmt = $conn->prepare("INSERT INTO department_submissions (department_id, submitted_by, fiscal_year, file_path) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("iiss", $dept_id, $user_id, $year, $filePath);
+            $stmt->execute();
+            
+            echo json_encode(["success" => true, "message" => "Report submitted successfully"]);
+        } else {
+            echo json_encode(["success" => false, "message" => "Failed to save file"]);
+        }
+    } else {
+        echo json_encode(["success" => false, "message" => "No file uploaded"]);
+    }
+}
+
+// ACTION: get_submissions (For Admin to see all filed reports)
+if ($action == 'get_submissions') {
+    $sql = "SELECT ds.*, d.name as department_name, u.full_name as submitter_name 
+            FROM department_submissions ds 
+            LEFT JOIN departments d ON ds.department_id = d.id 
+            LEFT JOIN users u ON ds.submitted_by = u.id 
+            ORDER BY ds.created_at DESC";
+            
+    $result = $conn->query($sql);
+    $data = [];
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $data[] = $row;
+        }
+    }
+    echo json_encode(["success" => true, "data" => $data]);
 }
 ?>

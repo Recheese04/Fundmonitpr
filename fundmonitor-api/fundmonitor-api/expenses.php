@@ -1,6 +1,6 @@
 <?php
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+header("Access-Control-Allow-Methods: POST, GET, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json");
 error_reporting(0);
@@ -9,6 +9,72 @@ ini_set('display_errors', 0);
 require_once 'config/db.php';
 
 $action = $_GET['action'] ?? '';
+
+// ── Edit a pending expense ─────────────────────────────────────────────────
+if ($action == 'update_pending') {
+    try {
+        $data       = json_decode(file_get_contents('php://input'), true);
+        $expense_id = intval($data['expense_id'] ?? 0);
+        $user_id    = intval($data['user_id'] ?? 0);
+        $amount     = floatval($data['amount'] ?? 0);
+        $desc       = mysqli_real_escape_string($conn, $data['description'] ?? '');
+        $date       = $data['date'] ?? date('Y-m-d');
+
+        if ($expense_id <= 0) throw new Exception("Invalid expense ID.");
+        if ($amount <= 0)     throw new Exception("Amount must be greater than 0.");
+        if (empty($desc))     throw new Exception("Description is required.");
+
+        // Only pending expenses can be edited
+        $check = mysqli_query($conn, "SELECT status, subcategory_id FROM expenses WHERE id = $expense_id AND user_id = $user_id");
+        $row   = mysqli_fetch_assoc($check);
+        if (!$row)                        throw new Exception("Expense not found.");
+        if ($row['status'] !== 'pending') throw new Exception("Only pending expenses can be edited.");
+
+        // Validate amount against remaining budget
+        $sub_id = intval($row['subcategory_id']);
+        $subRes = mysqli_query($conn, "SELECT remaining_budget FROM sub_categories WHERE id = $sub_id");
+        $subRow = mysqli_fetch_assoc($subRes);
+        $remaining = floatval($subRow['remaining_budget'] ?? 0);
+        if ($amount > $remaining) {
+            throw new Exception("Amount exceeds remaining budget. Available: PHP " . number_format($remaining, 2));
+        }
+
+        mysqli_query($conn, "UPDATE expenses SET amount = $amount, description = '$desc', expense_date = '$date' WHERE id = $expense_id");
+
+        // Audit trail
+        $auditStmt = $conn->prepare("INSERT INTO expense_audits (expense_id, user_id, action, comments) VALUES (?, ?, 'edited', 'Staff edited pending request')");
+        if ($auditStmt) { $auditStmt->bind_param("ii", $expense_id, $user_id); $auditStmt->execute(); }
+
+        echo json_encode(["success" => true, "message" => "Expense updated successfully."]);
+    } catch (Exception $e) {
+        echo json_encode(["success" => false, "message" => $e->getMessage()]);
+    }
+}
+
+// ── Cancel a pending expense ───────────────────────────────────────────────
+elseif ($action == 'cancel_pending') {
+    try {
+        $data       = json_decode(file_get_contents('php://input'), true);
+        $expense_id = intval($data['expense_id'] ?? 0);
+        $user_id    = intval($data['user_id'] ?? 0);
+
+        if ($expense_id <= 0) throw new Exception("Invalid expense ID.");
+
+        $check = mysqli_query($conn, "SELECT status FROM expenses WHERE id = $expense_id AND user_id = $user_id");
+        $row   = mysqli_fetch_assoc($check);
+        if (!$row)                        throw new Exception("Expense not found.");
+        if ($row['status'] !== 'pending') throw new Exception("Only pending expenses can be cancelled.");
+
+        mysqli_query($conn, "UPDATE expenses SET status = 'cancelled' WHERE id = $expense_id");
+
+        $auditStmt = $conn->prepare("INSERT INTO expense_audits (expense_id, user_id, action, comments) VALUES (?, ?, 'cancelled', 'Staff cancelled pending request')");
+        if ($auditStmt) { $auditStmt->bind_param("ii", $expense_id, $user_id); $auditStmt->execute(); }
+
+        echo json_encode(["success" => true, "message" => "Expense cancelled."]);
+    } catch (Exception $e) {
+        echo json_encode(["success" => false, "message" => $e->getMessage()]);
+    }
+}
 
 if ($action == 'create') {
     try {
@@ -23,20 +89,15 @@ if ($action == 'create') {
         $desc    = $_POST['description'] ?? '';
         $date    = $_POST['date'] ?? date('Y-m-d');
 
-        // Validation: Ensure amount does not exceed effective balance (Remaining - Pending)
+        // Validation: Ensure amount does not exceed remaining budget.
+        // Pending expenses do NOT reduce the available balance until they are approved.
         if ($sub_id) {
             $subRes = mysqli_query($conn, "SELECT remaining_budget FROM sub_categories WHERE id = $sub_id");
             $subData = mysqli_fetch_assoc($subRes);
             $remaining = floatval($subData['remaining_budget'] ?? 0);
 
-            $pendingRes = mysqli_query($conn, "SELECT SUM(amount) as pending FROM expenses WHERE subcategory_id = $sub_id AND status = 'pending'");
-            $pendingData = mysqli_fetch_assoc($pendingRes);
-            $pending = floatval($pendingData['pending'] ?? 0);
-
-            $effective = $remaining - $pending;
-
-            if ($amount > $effective) {
-                throw new Exception("Insufficient budget (pending requests included). Available: PHP " . number_format($effective, 2));
+            if ($amount > $remaining) {
+                throw new Exception("Insufficient budget. Available: PHP " . number_format($remaining, 2));
             }
         }
         
@@ -135,7 +196,7 @@ elseif ($action == 'get_user_stats') {
     $fy_row = mysqli_fetch_assoc($fy_res);
     $fiscalYearId = $fy_row ? intval($fy_row['id']) : 1;
 
-    // 1. Used this year (Approved only)
+    // 1. Used this year (Approved ONLY — pending should not count as "used" until approved)
     $q1 = mysqli_query($conn, "SELECT SUM(amount) as total FROM expenses WHERE user_id = $user_id AND status = 'approved' AND fiscal_year_id = $fiscalYearId");
     $r1 = mysqli_fetch_assoc($q1);
     $usedData = $r1['total'] ?? 0;

@@ -178,3 +178,62 @@ SUCCESS: Array
 )
 
 
+2026-05-13 12:57:58 - Request received
+POST data: Array
+(
+    [id] => 5
+    [status] => approved
+)
+
+Raw input: 
+Expense ID: 5
+Query 1: SELECT id, amount, subcategory_id, status, user_id FROM expenses WHERE id = ? with ID=5
+Expense data: Array
+(
+    [id] => 5
+    [amount] => 1.00
+    [subcategory_id] => 36
+    [status] => pending
+    [user_id] => 3
+)
+
+Amount: 1, Subcategory ID: 36
+Query 2: SELECT id, name, allocation_amount, remaining_budget FROM sub_categories WHERE id = ? with ID=36
+Subcategory BEFORE: Array
+(
+    [id] => 36
+    [name] => Program Assessment
+    [allocation_amount] => 10.00
+    [remaining_budget] => 10.00
+)
+
+Current budget: 10, Amount to deduct: 1
+Query 3: UPDATE sub_categories SET remaining_budget = ? WHERE id = ? with newBudget=9, ID=36
+Update executed: 1, Affected rows: 1, Error: 
+Subcategory AFTER: Array
+(
+    [remaining_budget] => 9.00
+)
+
+Query 4: UPDATE expenses SET status = 'approved' WHERE id = ? with ID=5
+Expense approval affected rows: 1
+SUCCESS: Array
+(
+    [success] => 1
+    [message] => Expense approved successfully!
+    [debug] => Array
+        (
+            [expense_id] => 5
+            [amount_deducted] => 1
+            [subcategory_id] => 36
+            [subcategory_name] => Program Assessment
+            [budget_before] => 10
+            [budget_after] => 9
+            [new_budget_calculated] => 9
+            [update_affected_rows] => 1
+            [approve_affected_rows] => 1
+        )
+
+)
+
+

@@ -329,34 +329,12 @@ export default function BudgetAllocation() {
                 {mode === "auto" ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
                     <div>
-                      <label style={labelStyle}>Fund injection (PHP)</label>
-                      <div style={{ position: "relative" }}>
-                        <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 14, fontWeight: 600, color: "#94a3b8" }}>₱</span>
-                        <input
-                          type="number" className="focus-gold" placeholder="0.00"
-                          value={amount} onChange={(e) => setAmount(e.target.value)}
-                          style={{ ...inputStyle, paddingLeft: 28, fontSize: 22, fontWeight: 800, fontFamily: "'IBM Plex Mono', monospace" }}
-                        />
+                      <div style={{ background: "#f8fafc", padding: "20px 24px", borderRadius: 12, border: "1px dashed #cbd5e1" }}>
+                        <h4 style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", margin: "0 0 8px" }}>Automatic Allocation Active</h4>
+                        <p style={{ fontSize: 13, color: "#64748b", margin: 0, lineHeight: 1.5 }}>
+                          Funds are now automatically allocated into categories by the University Administration upon transfer. You no longer need to manually inject or deploy budget.
+                        </p>
                       </div>
-                      <p style={{ fontSize: 11, color: "#94a3b8", margin: "7px 0 18px 2px" }}>
-                        Distributed by category ratios defined on the right.
-                      </p>
-                      <button className="btn-deploy" onClick={handleAutoAllocate} disabled={disabledBtn} style={{
-                        width: "100%", padding: "12px 0",
-                        background: disabledBtn ? "#f1f5f9" : "#0f172a",
-                        color: disabledBtn ? "#94a3b8" : "#fde68a",
-                        border: disabledBtn ? "1px solid #e2e8f0" : "1px solid rgba(245,168,43,0.2)",
-                        borderRadius: 10, fontSize: 13, fontWeight: 700,
-                        cursor: disabledBtn ? "not-allowed" : "pointer",
-                        letterSpacing: "0.04em",
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                        fontFamily: "inherit",
-                      }}>
-                        {loading
-                          ? <><div style={{ width: 13, height: 13, border: "2px solid rgba(253,230,138,0.3)", borderTopColor: "#fde68a", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />Processing…</>
-                          : "Deploy budget"
-                        }
-                      </button>
                     </div>
 
                     <div style={{ background: "#fafafa", border: "1px solid #f1f5f9", borderRadius: 12, padding: "16px 18px" }}>

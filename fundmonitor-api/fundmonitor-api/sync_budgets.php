@@ -12,8 +12,8 @@ while ($sub = mysqli_fetch_assoc($result)) {
     $sub_id = $sub['id'];
     $alloc = floatval($sub['allocation_amount']);
     
-    // Calculate total expenses for this sub-category
-    $exp_q = mysqli_query($conn, "SELECT SUM(amount) as total FROM expenses WHERE subcategory_id = $sub_id");
+    // Calculate total APPROVED expenses only — pending should NOT reduce the budget yet
+    $exp_q = mysqli_query($conn, "SELECT SUM(amount) as total FROM expenses WHERE subcategory_id = $sub_id AND status = 'approved'");
     $exp_row = mysqli_fetch_assoc($exp_q);
     $spent = floatval($exp_row['total'] ?? 0);
     

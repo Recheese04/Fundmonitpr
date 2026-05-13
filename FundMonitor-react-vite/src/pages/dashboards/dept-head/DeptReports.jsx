@@ -41,7 +41,9 @@ const BASE_URL = `${API_URL_CONFIG}/`;
 
 const DeptReports = () => {
   const [reports, setReports] = useState([]);
+  const [auditTrail, setAuditTrail] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("reports"); // "reports" or "audit"
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
@@ -63,6 +65,162 @@ const DeptReports = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchAuditTrail = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}?action=get_audit_trail&department_id=${activeDeptId}`);
+      const data = await response.json();
+      if (data.success) {
+        setAuditTrail(data.data || []);
+      }
+    } catch (err) {
+      console.error("Audit fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForwardToAdmin = async () => {
+    if (auditTrail.length === 0) {
+      toast.error("Nothing to submit. Audit trail is empty.");
+      return;
+    }
+
+    if (!window.confirm("Submit an official file snapshot of this department's audit trail to University Administration?")) return;
+    
+    setLoading(true);
+    try {
+      // 1. Generate CSV Content
+      const deptName = user?.department_name || "Department";
+      const escapeCSV = (val) => {
+        const stringVal = String(val ?? '');
+        if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
+          return `"${stringVal.replace(/"/g, '""')}"`;
+        }
+        return stringVal;
+      };
+
+      const headers = ["Timestamp", "Action", "Authorized By", "Role", "Item", "Amount", "Staff", "Comments"];
+      const dataRows = auditTrail.map(log => [
+        log.created_at,
+        log.action.toUpperCase(),
+        log.actor_name,
+        log.actor_role,
+        log.expense_desc,
+        parseFloat(log.expense_amount).toFixed(2),
+        log.staff_name,
+        log.comments || ""
+      ]);
+
+      const csvContent = [
+        escapeCSV(`OFFICIAL SUBMISSION - DEPARTMENTAL AUDIT TRAIL`),
+        escapeCSV(`Department: ${deptName}`),
+        escapeCSV(`Fiscal Year: ${new Date().getFullYear()}`),
+        escapeCSV(`Submitted At: ${new Date().toLocaleString()}`),
+        '',
+        headers.map(escapeCSV).join(','),
+        ...dataRows.map(row => row.map(escapeCSV).join(','))
+      ].join('\n');
+
+      // 2. Create File object
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const file = new File([blob], `submission_${deptName.toLowerCase()}_${Date.now()}.csv`, { type: 'text/csv' });
+
+      // 3. Upload File
+      const uploadData = new FormData();
+      uploadData.append('action', 'submit_report');
+      uploadData.append('department_id', activeDeptId);
+      uploadData.append('user_id', user.id || user.user_id || 0);
+      uploadData.append('report_file', file);
+      uploadData.append('fiscal_year', new Date().getFullYear());
+
+      const submitRes = await fetch(`${API_URL_CONFIG}/dept_expenses.php?action=submit_report`, {
+        method: 'POST',
+        body: uploadData
+      });
+      const submitResult = await submitRes.json();
+
+      if (submitResult.success) {
+        // 4. Notify all admins
+        const res = await fetch(`${API_URL_CONFIG}/admin_actions.php?action=get_users`);
+        const adminData = await res.json();
+        const admins = (adminData.data || adminData || []).filter(u => u.role === 'admin');
+        
+        for (const admin of admins) {
+          const formData = new FormData();
+          formData.append('user_id', admin.id);
+          formData.append('title', "Official Filing Received");
+          formData.append('message', `${deptName} has filed an official fiscal audit snapshot for review.`);
+          formData.append('type', "report_submission");
+
+          await fetch(`${API_URL_CONFIG}/dept_expenses.php?action=send_notification`, {
+            method: 'POST',
+            body: formData
+          });
+        }
+        toast.success("Audit file officially filed and forwarded to Administration!");
+      } else {
+        throw new Error(submitResult.message || "Failed to save file on server.");
+      }
+    } catch (err) {
+      console.error("Submission error:", err);
+      toast.error(err.message || "Failed to submit reports.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportAudit = () => {
+    if (auditTrail.length === 0) {
+      toast.error("No audit records to export.");
+      return;
+    }
+
+    const deptName = user?.department_name || "Department";
+    const escapeCSV = (val) => {
+      const stringVal = String(val ?? '');
+      if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
+        return `"${stringVal.replace(/"/g, '""')}"`;
+      }
+      return stringVal;
+    };
+
+    const headers = ["Timestamp", "Action", "Authorized By", "Role", "Item", "Amount", "Staff", "Comments"];
+    const rows = auditTrail.map(log => [
+      log.created_at,
+      log.action.toUpperCase(),
+      log.actor_name,
+      log.actor_role,
+      log.expense_desc,
+      parseFloat(log.expense_amount).toFixed(2),
+      log.staff_name,
+      log.comments || ""
+    ]);
+
+    const csvContent = [
+      escapeCSV(`FUND MONITOR - DEPARTMENTAL AUDIT TRAIL`),
+      escapeCSV(`Department: ${deptName}`),
+      escapeCSV(`Exported At: ${new Date().toLocaleString()}`),
+      '',
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safeDeptName = deptName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `audit_trail_${safeDeptName}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Audit Trail exported successfully!");
   };
 
  const handleStatusUpdate = async (id, newStatus, staffName) => {
@@ -103,8 +261,12 @@ const DeptReports = () => {
 };
 
 useEffect(() => {
-  fetchReports();
-}, [activeDeptId]);
+  if (activeTab === "reports") {
+    fetchReports();
+  } else {
+    fetchAuditTrail();
+  }
+}, [activeDeptId, activeTab]);
   // Format currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-PH', {
@@ -195,7 +357,25 @@ useEffect(() => {
         }
       `}</style>
       <div className="space-y-6 p-6">
-        {/* Header */}
+        {/* Tab Switcher */}
+        <div className="flex border-b border-slate-200 print:hidden">
+          <button 
+            onClick={() => setActiveTab("reports")}
+            className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${activeTab === "reports" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          >
+            Expense Reports
+          </button>
+          <button 
+            onClick={() => setActiveTab("audit")}
+            className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${activeTab === "audit" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          >
+            Department Audit Trail
+          </button>
+        </div>
+
+        {activeTab === "reports" ? (
+          <>
+            {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
           <div>
             <h2 className="text-3xl font-bold text-slate-900">Expense Reports</h2>
@@ -218,27 +398,61 @@ useEffect(() => {
                   toast.error("No records to export.");
                   return;
                 }
+
+                // 1. Prepare Metadata & Summary
+                const deptName = user?.department_name || "Department";
+                const exportDate = new Date().toLocaleString();
+                
+                const escapeCSV = (val) => {
+                  const stringVal = String(val ?? '');
+                  if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
+                    return `"${stringVal.replace(/"/g, '""')}"`;
+                  }
+                  return stringVal;
+                };
+
+                // 2. Headers & Data
                 const headers = ["ID", "Date", "Staff Name", "Role", "Category", "Description", "Amount (PHP)", "Status"];
                 const rows = filteredReports.map(e => [
                   e.id, 
                   e.expense_date, 
-                  `"${e.staff_name}"`, 
-                  `"${e.staff_role || 'Staff'}"`, 
-                  `"${e.subcategory_name || 'General'}"`, 
-                  `"${e.description || ''}"`, 
-                  e.amount, 
+                  e.staff_name, 
+                  e.staff_role || 'Staff', 
+                  e.subcategory_name || 'General', 
+                  e.description || '', 
+                  parseFloat(e.amount || 0).toFixed(2), 
                   e.status.toUpperCase()
                 ]);
-                const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+
+                // 3. Construct CSV
+                const csvContent = [
+                  escapeCSV(`FUND MONITOR - DEPARTMENT EXPENSE LEDGER`),
+                  escapeCSV(`Department: ${deptName}`),
+                  escapeCSV(`Exported At: ${exportDate}`),
+                  '', // Spacer
+                  escapeCSV(`SUMMARY STATISTICS`),
+                  escapeCSV(`Total Records: ${stats.total}`),
+                  escapeCSV(`Total Amount: PHP ${stats.totalAmount.toFixed(2)}`),
+                  escapeCSV(`Approved Amount: PHP ${stats.approvedAmount.toFixed(2)}`),
+                  escapeCSV(`Pending Amount: PHP ${stats.pendingAmount.toFixed(2)}`),
+                  '', // Spacer
+                  headers.map(escapeCSV).join(','),
+                  ...rows.map(row => row.map(escapeCSV).join(','))
+                ].join('\n');
+
+                // 4. Download
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a");
                 const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                const safeDeptName = deptName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                
                 link.setAttribute("href", url);
-                link.setAttribute("download", `Department_Expenses_${new Date().toISOString().split('T')[0]}.csv`);
+                link.setAttribute("download", `expenses_${safeDeptName}_${new Date().toISOString().split('T')[0]}.csv`);
                 link.style.visibility = 'hidden';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                URL.revokeObjectURL(url);
                 toast.success("Department Expenses exported successfully!");
               }}
               className="gap-2"
@@ -573,6 +787,98 @@ useEffect(() => {
             )}
           </CardContent>
         </Card>
+          </>
+        ) : (
+          <>
+            {/* Audit Trail Content */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900">Department Audit Trail</h2>
+                <p className="text-sm text-slate-600 mt-1">Chronological history of all financial decisions and edits</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={fetchAuditTrail} disabled={loading} className="h-10 px-3">
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+                <Button variant="outline" onClick={handleExportAudit} className="gap-2 h-10 px-4">
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </Button>
+                <Button variant="outline" onClick={() => window.print()} className="gap-2 h-10 px-4">
+                  <Printer className="w-4 h-4" />
+                  Print
+                </Button>
+                <Button onClick={handleForwardToAdmin} className="gap-2 h-10 px-4 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100">
+                  <ExternalLink className="w-4 h-4" />
+                  Forward to Admin
+                </Button>
+              </div>
+            </div>
+
+            <Card className="shadow-lg">
+              <CardHeader className="border-b bg-slate-50">
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-indigo-600" />
+                  <span className="text-lg">Activity Log</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {loading ? (
+                  <div className="text-center py-12"><RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-indigo-600" /></div>
+                ) : auditTrail.length === 0 ? (
+                  <div className="text-center py-12"><AlertTriangle className="w-12 h-12 mx-auto mb-3 text-slate-300" /><p className="text-sm text-slate-600">No activity recorded yet.</p></div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="font-semibold">Timestamp</TableHead>
+                          <TableHead className="font-semibold">Action Performed</TableHead>
+                          <TableHead className="font-semibold">Authorized By</TableHead>
+                          <TableHead className="font-semibold">Requisition Item</TableHead>
+                          <TableHead className="font-semibold">Details / Comments</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {auditTrail.map((log) => (
+                          <TableRow key={log.id} className="hover:bg-slate-50 transition-colors">
+                            <TableCell className="text-xs font-medium text-slate-500">
+                              {new Date(log.created_at).toLocaleString('en-US', {
+                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                              })}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={`text-[10px] uppercase font-bold px-2 py-0.5 ${
+                                log.action === 'approved' ? 'bg-green-100 text-green-700' :
+                                log.action === 'rejected' ? 'bg-red-100 text-red-700' :
+                                log.action === 'edited' ? 'bg-blue-100 text-blue-700' :
+                                'bg-slate-100 text-slate-700'
+                              }`}>
+                                {log.action.replace('_', ' ')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-semibold text-slate-900">{log.actor_name}</div>
+                              <div className="text-[10px] text-slate-400 uppercase font-bold">{log.actor_role.replace('_', ' ')}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium text-slate-800">{log.expense_desc}</div>
+                              <div className="text-[10px] text-indigo-600 font-bold">{formatCurrency(parseFloat(log.expense_amount))}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm text-slate-600 italic">"{log.comments || 'No additional notes'}"</div>
+                              <div className="text-[10px] text-slate-400 mt-1">Staff: {log.staff_name}</div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </DeptLayout>
   );
